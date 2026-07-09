@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   Download,
@@ -347,9 +348,17 @@ function DatasetCatalogView({
 function DatasetDetailView({
   dataset,
   onBack,
+  onCreateTask,
+  onExport,
+  onRename,
+  onDelete,
 }: {
   dataset: DatasetCatalogItem;
   onBack: () => void;
+  onCreateTask: () => void;
+  onExport: () => void;
+  onRename: () => void;
+  onDelete: () => void;
 }) {
   const [nBaseInput, setNBaseInput] = useState('20');
   const [seedInput, setSeedInput] = useState('1');
@@ -404,17 +413,17 @@ function DatasetDetailView({
 
           <div className="dataset-detail-card dataset-detail-actions">
             <h4>操作</h4>
-            <button type="button" className="btn btn-primary" onClick={() => {}}>
-              <Play size={14} aria-hidden="true" /> 创建任务（TODO）
+            <button type="button" className="btn btn-primary" onClick={onCreateTask}>
+              <Play size={14} aria-hidden="true" /> 创建任务
             </button>
-            <button type="button" className="btn btn-secondary" onClick={() => {}}>
-              <Download size={14} aria-hidden="true" /> 导出数据（TODO）
+            <button type="button" className="btn btn-secondary" onClick={onExport}>
+              <Download size={14} aria-hidden="true" /> 导出数据
             </button>
-            <button type="button" className="btn btn-secondary" onClick={() => {}}>
-              重命名（TODO）
+            <button type="button" className="btn btn-secondary" onClick={onRename}>
+              重命名
             </button>
-            <button type="button" className="btn btn-danger" onClick={() => {}}>
-              删除（TODO）
+            <button type="button" className="btn btn-danger" onClick={onDelete}>
+              删除
             </button>
           </div>
         </aside>
@@ -526,6 +535,7 @@ function DatasetDetailView({
 /* ========== 主组件 ========== */
 
 export function DatasetManagementPage() {
+  const navigate = useNavigate();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'card'>('list');
   const [datasets, setDatasets] = useState<DatasetCatalogItem[]>(sampleDatasets);
@@ -607,6 +617,35 @@ export function DatasetManagementPage() {
     }
   }
 
+  function handleCreateTask() {
+    navigate('/workbench/analysis');
+  }
+
+  function handleExport(dataset: DatasetCatalogItem) {
+    const blob = new Blob([JSON.stringify(dataset, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${dataset.name}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleRename(dataset: DatasetCatalogItem) {
+    const newName = window.prompt('输入新的数据集名称', dataset.name);
+    if (newName && newName.trim() && newName !== dataset.name) {
+      setDatasets((prev) =>
+        prev.map((d) => (d.id === dataset.id ? { ...d, name: newName.trim() } : d)),
+      );
+    }
+  }
+
+  function handleDelete(dataset: DatasetCatalogItem) {
+    if (!window.confirm(`确认删除数据集「${dataset.name}」？此操作不可撤销。`)) return;
+    setDatasets((prev) => prev.filter((d) => d.id !== dataset.id));
+    setSelectedId(null);
+  }
+
   const catalog = (
     <DatasetCatalogView
       datasets={datasets}
@@ -637,6 +676,10 @@ export function DatasetManagementPage() {
         <DatasetDetailView
           dataset={activeDataset}
           onBack={() => setSelectedId(null)}
+          onCreateTask={handleCreateTask}
+          onExport={() => handleExport(activeDataset)}
+          onRename={() => handleRename(activeDataset)}
+          onDelete={() => handleDelete(activeDataset)}
         />
       ) : (
         catalog
