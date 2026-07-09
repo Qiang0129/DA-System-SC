@@ -1464,6 +1464,16 @@ p {
   color: var(--app-text-muted);
 }
 
+.dataset-upload-error {
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--error-color);
+  border-radius: var(--panel-radius);
+  background: color-mix(in srgb, var(--error-color) 8%, transparent);
+  color: var(--error-color);
+  font-size: 13px;
+}
+
 /* ========== 数据管理 - 详情视图 ========== */
 
 .dataset-detail-shell {

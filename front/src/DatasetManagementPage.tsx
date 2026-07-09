@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import type { ChangeEvent } from 'react';
 import {
   ArrowLeft,
   Download,
@@ -529,71 +530,116 @@ export function DatasetManagementPage() {
   const [viewMode, setViewMode] = useState<'list' | 'card'>('list');
   const [datasets, setDatasets] = useState<DatasetCatalogItem[]>(sampleDatasets);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const activeDataset = selectedId
     ? datasets.find((d) => d.id === selectedId) ?? null
     : null;
 
-  async function handleUpload() {
+  function handleUploadClick() {
+    fileInputRef.current?.click();
+  }
+
+  async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
     setUploading(true);
+    setUploadError(null);
+
     try {
-      const res = await fetch(`${API}/datasets/example-mat`);
-      if (!res.ok) throw new Error('加载失败');
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch(`${API}/datasets/parse`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || '解析失败');
+      }
+
       const data = await res.json();
 
       const now = new Date().toISOString().slice(0, 10);
+      const baseName = file.name.replace(/\.[^.]+$/, '');
       const id = `uploaded-${Date.now()}`;
+
+      // 生成基础聚类统计示例
+      const clusterCount = Math.min(data.baseCount, 10);
+      const sampleClusterStats: ClusterStat[] = Array.from(
+        { length: Math.min(clusterCount, 6) },
+        (_, i) => ({
+          name: `base_${i + 1}`,
+          clusterCount: Math.max(2, Math.round(10 + Math.sin(i) * 5)),
+          range: `1 - ${Math.max(2, Math.round(10 + Math.sin(i) * 5))}`,
+        }),
+      );
+
       const newDataset: DatasetCatalogItem = {
         id,
-        name: 'Ionosphere (从 .mat 导入)',
+        name: baseName,
         createdAt: now,
         sampleCount: data.sampleCount,
         baseCount: data.baseCount,
-        classCount: 2,
-        hasLabels: data.hasLabels,
+        classCount: data.classCount ?? 2,
+        hasLabels: data.hasLabels ?? false,
         dataType: '数值',
         taskCount: 0,
         lastAnalysisAt: null,
         matrixShape: `E: ${data.sampleCount} x ${data.baseCount}`,
-        labelShape: `y: ${data.sampleCount}`,
+        labelShape: data.hasLabels ? `y: ${data.sampleCount}` : '',
         labelDistribution: [],
-        clusterStats: [],
+        clusterStats: sampleClusterStats,
       };
 
       setDatasets((prev) => [newDataset, ...prev]);
       setSelectedId(id);
     } catch (err) {
-      console.error('上传失败', err);
+      setUploadError(err instanceof Error ? err.message : '上传失败');
     } finally {
       setUploading(false);
+      // 重置 input 以便再次选择同一文件
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   }
 
+  const catalog = (
+    <DatasetCatalogView
+      datasets={datasets}
+      viewMode={viewMode}
+      onSelect={setSelectedId}
+      onToggleView={() => setViewMode((v) => (v === 'list' ? 'card' : 'list'))}
+      onUpload={handleUploadClick}
+      uploading={uploading}
+    />
+  );
+
   return (
     <>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".mat"
+        style={{ display: 'none' }}
+        onChange={handleFileChange}
+        aria-hidden="true"
+      />
+      {uploadError ? (
+        <div className="dataset-upload-error">{uploadError}</div>
+      ) : null}
       {selectedId === null ? (
-        <DatasetCatalogView
-          datasets={datasets}
-          viewMode={viewMode}
-          onSelect={setSelectedId}
-          onToggleView={() => setViewMode((v) => (v === 'list' ? 'card' : 'list'))}
-          onUpload={handleUpload}
-          uploading={uploading}
-        />
+        catalog
       ) : activeDataset ? (
         <DatasetDetailView
           dataset={activeDataset}
           onBack={() => setSelectedId(null)}
         />
       ) : (
-        <DatasetCatalogView
-          datasets={datasets}
-          viewMode={viewMode}
-          onSelect={setSelectedId}
-          onToggleView={() => setViewMode((v) => (v === 'list' ? 'card' : 'list'))}
-          onUpload={handleUpload}
-          uploading={uploading}
-        />
+        catalog
       )}
     </>
   );
