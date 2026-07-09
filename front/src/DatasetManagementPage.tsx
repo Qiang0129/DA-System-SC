@@ -1,30 +1,13 @@
 import { useMemo, useState } from 'react';
-import type { ChangeEvent } from 'react';
 import {
-  Boxes,
-  CheckCircle2,
-  ClipboardList,
-  Database,
-  FileSpreadsheet,
-  FileUp,
-  FlaskConical,
+  ArrowLeft,
+  Download,
   Play,
   RefreshCw,
+  Search,
   Shuffle,
-  Tags,
   Upload,
 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-
-type DatasetSummary = {
-  name: string;
-  matrixShape: string;
-  labelShape: string;
-  sampleCount: number;
-  baseCount: number;
-  classCount: number;
-  hasLabels: boolean;
-};
 
 type ClusterStat = {
   name: string;
@@ -32,30 +15,114 @@ type ClusterStat = {
   range: string;
 };
 
-type TaskDraft = {
+type LabelDistributionItem = {
+  label: string;
+  count: number;
+  percent: number;
+};
+
+type DatasetCatalogItem = {
+  id: string;
   name: string;
-  mode: string;
-  nBase: number;
-  selectedCount: number;
   createdAt: string;
+  sampleCount: number;
+  baseCount: number;
+  classCount: number;
+  hasLabels: boolean;
+  dataType: '数值' | '混合';
+  taskCount: number;
+  lastAnalysisAt: string | null;
+  matrixShape: string;
+  labelShape: string;
+  labelDistribution: LabelDistributionItem[];
+  clusterStats: ClusterStat[];
 };
 
-const ionosphereDataset: DatasetSummary = {
-  name: 'Ionosphere 示例数据',
-  matrixShape: 'E: 351 x 100',
-  labelShape: 'y: 351',
-  sampleCount: 351,
-  baseCount: 100,
-  classCount: 2,
-  hasLabels: true,
-};
-
-const labelDistribution = [
-  { label: '类别 1', count: 225, percent: 64 },
-  { label: '类别 2', count: 126, percent: 36 },
+const sampleDatasets: DatasetCatalogItem[] = [
+  {
+    id: 'ionosphere',
+    name: 'Ionosphere 雷达数据',
+    createdAt: '2026-07-01',
+    sampleCount: 351,
+    baseCount: 100,
+    classCount: 2,
+    hasLabels: true,
+    dataType: '数值',
+    taskCount: 3,
+    lastAnalysisAt: '2026-07-08',
+    matrixShape: 'E: 351 x 100',
+    labelShape: 'y: 351',
+    labelDistribution: [
+      { label: '类别 1', count: 225, percent: 64 },
+      { label: '类别 2', count: 126, percent: 36 },
+    ],
+    clusterStats: [
+      { name: 'base_1', clusterCount: 11, range: '1 - 11' },
+      { name: 'base_2', clusterCount: 16, range: '1 - 16' },
+      { name: 'base_3', clusterCount: 3, range: '1 - 3' },
+      { name: 'base_4', clusterCount: 9, range: '1 - 9' },
+      { name: 'base_5', clusterCount: 15, range: '1 - 15' },
+      { name: 'base_6', clusterCount: 14, range: '1 - 14' },
+      { name: 'base_7', clusterCount: 11, range: '1 - 11' },
+      { name: 'base_8', clusterCount: 2, range: '1 - 2' },
+    ],
+  },
+  {
+    id: 'wine',
+    name: 'Wine 葡萄酒成分',
+    createdAt: '2026-06-21',
+    sampleCount: 178,
+    baseCount: 80,
+    classCount: 3,
+    hasLabels: true,
+    dataType: '数值',
+    taskCount: 1,
+    lastAnalysisAt: '2026-06-28',
+    matrixShape: 'E: 178 x 80',
+    labelShape: 'y: 178',
+    labelDistribution: [
+      { label: '类别 1', count: 59, percent: 33 },
+      { label: '类别 2', count: 71, percent: 40 },
+      { label: '类别 3', count: 48, percent: 27 },
+    ],
+    clusterStats: [
+      { name: 'base_1', clusterCount: 8, range: '1 - 8' },
+      { name: 'base_2', clusterCount: 12, range: '1 - 12' },
+      { name: 'base_3', clusterCount: 5, range: '1 - 5' },
+      { name: 'base_4', clusterCount: 10, range: '1 - 10' },
+      { name: 'base_5', clusterCount: 7, range: '1 - 7' },
+      { name: 'base_6', clusterCount: 9, range: '1 - 9' },
+    ],
+  },
+  {
+    id: 'seeds',
+    name: 'Seeds 小麦种子',
+    createdAt: '2026-05-14',
+    sampleCount: 210,
+    baseCount: 60,
+    classCount: 3,
+    hasLabels: true,
+    dataType: '数值',
+    taskCount: 0,
+    lastAnalysisAt: null,
+    matrixShape: 'E: 210 x 60',
+    labelShape: 'y: 210',
+    labelDistribution: [
+      { label: '类别 K', count: 70, percent: 33 },
+      { label: '类别 R', count: 70, percent: 33 },
+      { label: '类别 W', count: 70, percent: 33 },
+    ],
+    clusterStats: [
+      { name: 'base_1', clusterCount: 6, range: '1 - 6' },
+      { name: 'base_2', clusterCount: 9, range: '1 - 9' },
+      { name: 'base_3', clusterCount: 4, range: '1 - 4' },
+      { name: 'base_4', clusterCount: 7, range: '1 - 7' },
+      { name: 'base_5', clusterCount: 5, range: '1 - 5' },
+    ],
+  },
 ];
 
-const clusterStats: ClusterStat[] = [
+const clusterStats = [
   { name: 'base_1', clusterCount: 11, range: '1 - 11' },
   { name: 'base_2', clusterCount: 16, range: '1 - 16' },
   { name: 'base_3', clusterCount: 3, range: '1 - 3' },
@@ -65,8 +132,6 @@ const clusterStats: ClusterStat[] = [
   { name: 'base_7', clusterCount: 11, range: '1 - 11' },
   { name: 'base_8', clusterCount: 2, range: '1 - 2' },
 ];
-
-const supportedFormats = ['CSV', 'JSON', 'Excel', 'MAT', 'NPZ'];
 
 const defaultSelectedBases = Array.from({ length: 20 }, (_, index) => index + 1);
 
@@ -95,195 +160,212 @@ function formatBaseName(id: number) {
   return `base_${id}`;
 }
 
-function DatasetMetricCard({
-  label,
-  value,
-  note,
-  icon: Icon,
-  tone,
+/* ========== 目录视图 ========== */
+
+function DatasetCatalogView({
+  datasets,
+  onSelect,
+  onExampleLoad,
 }: {
-  label: string;
-  value: string;
-  note: string;
-  icon: LucideIcon;
-  tone: 'neutral' | 'green' | 'amber' | 'purple';
+  datasets: DatasetCatalogItem[];
+  onSelect: (id: string) => void;
+  onExampleLoad: () => void;
 }) {
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'全部' | '数值' | '混合'>('全部');
+
+  const filtered = useMemo(() => {
+    let list = datasets;
+    if (search) {
+      const q = search.toLowerCase();
+      list = list.filter((d) => d.name.toLowerCase().includes(q));
+    }
+    if (typeFilter !== '全部') {
+      list = list.filter((d) => d.dataType === typeFilter);
+    }
+    return list;
+  }, [datasets, search, typeFilter]);
+
   return (
-    <article className={`summary-card tone-${tone}`}>
-      <div className="summary-icon" aria-hidden="true">
-        <Icon size={20} />
+    <div className="dataset-catalog">
+      <div className="dataset-toolbar">
+        <div className="dataset-toolbar-left">
+          <span className="dataset-search-icon" aria-hidden="true">
+            <Search size={15} />
+          </span>
+          <input
+            className="dataset-search-input"
+            type="text"
+            placeholder="搜索数据集…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="dataset-toolbar-center">
+          <select
+            className="dataset-type-select"
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value as typeof typeFilter)}
+            aria-label="数据类型筛选"
+          >
+            <option value="全部">全部</option>
+            <option value="数值">数值</option>
+            <option value="混合">混合</option>
+          </select>
+        </div>
+        <div className="dataset-toolbar-right">
+          <button type="button" className="btn btn-secondary" onClick={onExampleLoad}>
+            <RefreshCw size={15} aria-hidden="true" />
+            使用示例数据
+          </button>
+          <button type="button" className="btn btn-primary" onClick={() => {}}>
+            <Upload size={15} aria-hidden="true" />
+            上传数据集
+          </button>
+        </div>
       </div>
-      <div>
-        <span className="card-label">{label}</span>
-        <strong>{value}</strong>
-        <small>{note}</small>
+
+      <div className="dataset-table">
+        <div className="dataset-table-header">
+          <span className="dataset-col-name">数据集</span>
+          <span className="dataset-col-size">规模 n / m / c</span>
+          <span className="dataset-col-status">状态 / 类型</span>
+          <span className="dataset-col-usage">使用情况</span>
+          <span className="dataset-col-enter" />
+        </div>
+        {filtered.length === 0 ? (
+          <div className="dataset-table-empty">暂无匹配数据集</div>
+        ) : (
+          filtered.map((d) => (
+            <div
+              key={d.id}
+              className="dataset-row"
+              role="button"
+              tabIndex={0}
+              onClick={() => onSelect(d.id)}
+              onKeyDown={(e) => { if (e.key === 'Enter') onSelect(d.id); }}
+            >
+              <span className="dataset-col-name">
+                <strong>{d.name}</strong>
+                <small>{d.createdAt}</small>
+              </span>
+              <span className="dataset-col-size">
+                <code>{d.sampleCount} / {d.baseCount} / {d.classCount}</code>
+              </span>
+              <span className="dataset-col-status">
+                <span className={`dataset-status-dot ${d.hasLabels ? 'has-labels' : ''}`} aria-hidden="true" />
+                {d.hasLabels ? '有标签' : '无标签'}
+                <span className="dataset-type-tag">{d.dataType}</span>
+              </span>
+              <span className="dataset-col-usage">
+                {d.taskCount > 0 ? (
+                  <>{d.taskCount} 任务 · {d.lastAnalysisAt}</>
+                ) : (
+                  <span className="dataset-usage-empty">未使用</span>
+                )}
+              </span>
+              <span className="dataset-col-enter" aria-hidden="true">&rsaquo;</span>
+            </div>
+          ))
+        )}
       </div>
-    </article>
+    </div>
   );
 }
 
-export function DatasetManagementPage() {
-  const [sourceName, setSourceName] = useState(ionosphereDataset.name);
-  const [fileName, setFileName] = useState('ionosphere_base_clustering.npz / .mat');
+/* ========== 详情视图 ========== */
+
+function DatasetDetailView({
+  dataset,
+  onBack,
+}: {
+  dataset: DatasetCatalogItem;
+  onBack: () => void;
+}) {
   const [nBaseInput, setNBaseInput] = useState('20');
   const [seedInput, setSeedInput] = useState('1');
   const [selectedBases, setSelectedBases] = useState(defaultSelectedBases);
 
-  const nBase = clamp(Number(nBaseInput), 1, ionosphereDataset.baseCount);
+  const nBase = clamp(Number(nBaseInput), 1, dataset.baseCount);
   const seed = clamp(Number(seedInput), 1, 999999);
-
-  const selectedRatio = Math.round((selectedBases.length / ionosphereDataset.baseCount) * 100);
+  const selectedRatio = Math.round((selectedBases.length / dataset.baseCount) * 100);
 
   const selectedPreview = useMemo(
     () => selectedBases.map((id) => formatBaseName(id)),
     [selectedBases],
   );
 
-  function handleExampleLoad() {
-    setSourceName(ionosphereDataset.name);
-    setFileName('ionosphere_base_clustering.npz / .mat');
-    setNBaseInput('20');
-    setSelectedBases(defaultSelectedBases);
-  }
-
-  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-
-    if (!file) {
-      return;
-    }
-
-    setFileName(file.name);
-    setSourceName(file.name.replace(/\.[^.]+$/, '') || '本地基础聚类数据');
-  }
-
   function handleRandomSelect() {
-    setSelectedBases(selectBases(ionosphereDataset.baseCount, nBase, seed));
+    setSelectedBases(selectBases(dataset.baseCount, nBase, seed));
   }
 
   return (
-    <>
-      <section className="status-header" aria-label="数据源状态">
-        <div className="status-left">
-          <span className="status-dot success" aria-hidden="true" />
-          <div>
-            <span className="status-label">当前数据源</span>
-            <strong>{sourceName}</strong>
-          </div>
-        </div>
-        <div className="status-meta">
-          <span>文件路径</span>
-          <strong>{fileName}</strong>
-        </div>
-        <div className="status-actions">
-          <button type="button" className="btn btn-secondary" onClick={handleExampleLoad}>
-            <RefreshCw size={16} aria-hidden="true" />
-            使用示例数据
-          </button>
-        </div>
-      </section>
+    <div className="dataset-detail-shell">
+      <div className="dataset-detail-topbar">
+        <button type="button" className="dataset-detail-back" onClick={onBack}>
+          <ArrowLeft size={14} aria-hidden="true" /> 返回
+        </button>
+        <span className="dataset-detail-breadcrumb">数据集 · {dataset.name}</span>
+      </div>
 
-      <section className="summary-grid" aria-label="数据管理概览">
-        <DatasetMetricCard
-          label="样本数 n"
-          value={String(ionosphereDataset.sampleCount)}
-          note="Ionosphere 示例数据"
-          icon={Database}
-          tone="neutral"
-        />
-        <DatasetMetricCard
-          label="基础聚类 m"
-          value={String(ionosphereDataset.baseCount)}
-          note="基础聚类矩阵 E"
-          icon={Boxes}
-          tone="green"
-        />
-        <DatasetMetricCard
-          label="真实类别 c"
-          value={String(ionosphereDataset.classCount)}
-          note="含真实标签 y"
-          icon={Tags}
-          tone="purple"
-        />
-        <DatasetMetricCard
-          label="标签状态"
-          value={ionosphereDataset.hasLabels ? '已导入' : '未导入'}
-          note="可计算 ACC / NMI / ARI / F1"
-          icon={CheckCircle2}
-          tone="amber"
-        />
-      </section>
-
-      <section className="dataset-workflow-grid" aria-label="数据管理流程工作台">
-        <section className="panel dataset-import-panel" aria-label="导入基础聚类结果">
-          <div className="panel-header">
-            <div>
-              <h2>导入基础聚类结果</h2>
-              <span>支持常规表格格式，也保留算法原生示例格式。</span>
-            </div>
-            <FileUp size={20} aria-hidden="true" />
+      <div className="dataset-detail-layout">
+        <aside className="dataset-detail-sidebar">
+          <div className="dataset-detail-card">
+            <h4>基本信息</h4>
+            <dl>
+              <dt>名称</dt><dd>{dataset.name}</dd>
+              <dt>上传时间</dt><dd>{dataset.createdAt}</dd>
+              <dt>类型</dt><dd>{dataset.dataType}</dd>
+              <dt>状态</dt>
+              <dd>
+                <span className={`dataset-status-dot ${dataset.hasLabels ? 'has-labels' : ''}`} aria-hidden="true" />
+                {dataset.hasLabels ? '有标签' : '无标签'}
+              </dd>
+            </dl>
           </div>
 
-          <label className="dataset-dropzone">
-            <input
-              type="file"
-              aria-label="上传基础聚类结果文件"
-              accept=".csv,.json,.xlsx,.xls,.mat,.npz"
-              onChange={handleFileChange}
-            />
-            <span className="dataset-dropzone-icon" aria-hidden="true">
-              <Upload size={22} />
-            </span>
-            <strong>选择或拖入基础聚类结果文件</strong>
-            <small>CSV / JSON / Excel / MAT / NPZ</small>
-          </label>
-
-          <div className="format-chip-row" aria-label="支持格式">
-            {supportedFormats.map((format) => (
-              <span key={format}>{format}</span>
-            ))}
-          </div>
-
-          <div className="dataset-file-summary">
-            <div>
-              <span>矩阵结构</span>
-              <strong>{ionosphereDataset.matrixShape}</strong>
-            </div>
-            <div>
-              <span>标签向量</span>
-              <strong>{ionosphereDataset.labelShape}</strong>
+          <div className="dataset-detail-card">
+            <h4>规模</h4>
+            <div className="dataset-scale-numbers">
+              <div><strong>{dataset.sampleCount}</strong><span>样本 n</span></div>
+              <div><strong>{dataset.baseCount}</strong><span>基础聚类 m</span></div>
+              <div><strong>{dataset.classCount}</strong><span>真实类别 c</span></div>
             </div>
           </div>
-        </section>
 
-        <div className="dataset-middle-stack">
-          <section className="panel dataset-statistics-panel" aria-label="查看基础聚类统计">
-            <div className="panel-header">
-              <div>
-                <h2>查看基础聚类统计</h2>
-                <span>展示每个基础聚类的簇数量、标签范围和选择状态。</span>
-              </div>
-              <FileSpreadsheet size={20} aria-hidden="true" />
-            </div>
+          <div className="dataset-detail-card dataset-detail-actions">
+            <h4>操作</h4>
+            <button type="button" className="btn btn-primary" onClick={() => {}}>
+              <Play size={14} aria-hidden="true" /> 创建任务（TODO）
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={() => {}}>
+              <Download size={14} aria-hidden="true" /> 导出数据（TODO）
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={() => {}}>
+              重命名（TODO）
+            </button>
+            <button type="button" className="btn btn-danger" onClick={() => {}}>
+              删除（TODO）
+            </button>
+          </div>
+        </aside>
 
+        <main className="dataset-detail-main">
+          <section className="dataset-detail-section">
+            <h3>标签分布</h3>
             <div className="dataset-stat-grid">
-              <div>
-                <span>标签分布</span>
-                {labelDistribution.map((item) => (
-                  <div className="label-distribution-row" key={item.label}>
-                    <strong>{item.label}</strong>
-                    <span>{item.count}</span>
-                    <i style={{ width: `${item.percent}%` }} aria-hidden="true" />
-                  </div>
-                ))}
-              </div>
-              <div>
-                <span>簇数量范围</span>
-                <strong>2 - 18</strong>
-                <small>前 8 个基础聚类预览</small>
-              </div>
+              {dataset.labelDistribution.map((item) => (
+                <div className="label-distribution-row" key={item.label}>
+                  <strong>{item.label}</strong>
+                  <span>{item.count}</span>
+                  <i style={{ width: `${item.percent}%` }} aria-hidden="true" />
+                </div>
+              ))}
             </div>
+          </section>
 
+          <section className="dataset-detail-section">
+            <h3>基础聚类统计</h3>
             <div className="dataset-table-wrap">
               <table className="dataset-stat-table">
                 <thead>
@@ -295,7 +377,7 @@ export function DatasetManagementPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {clusterStats.map((stat) => (
+                  {dataset.clusterStats.map((stat) => (
                     <tr key={stat.name}>
                       <td>{stat.name}</td>
                       <td>{stat.clusterCount}</td>
@@ -308,26 +390,19 @@ export function DatasetManagementPage() {
             </div>
           </section>
 
-          <section className="panel dataset-selection-panel" aria-label="基础聚类随机选择">
-            <div className="panel-header">
-              <div>
-                <h2>基础聚类随机选择</h2>
-                <span>按 n_base 和随机种子生成本次 CA 构建使用的基础聚类子集。</span>
-              </div>
-              <Shuffle size={20} aria-hidden="true" />
-            </div>
-
+          <section className="dataset-detail-section">
+            <h3>选择基础聚类</h3>
             <div className="selection-controls">
               <label>
                 <span>n_base</span>
                 <input
                   type="number"
                   min={1}
-                  max={ionosphereDataset.baseCount}
+                  max={dataset.baseCount}
                   aria-label="n_base"
                   value={nBaseInput}
                   onBlur={() => setNBaseInput(String(nBase))}
-                  onChange={(event) => setNBaseInput(event.target.value)}
+                  onChange={(e) => setNBaseInput(e.target.value)}
                 />
               </label>
               <label>
@@ -338,7 +413,7 @@ export function DatasetManagementPage() {
                   aria-label="随机种子"
                   value={seedInput}
                   onBlur={() => setSeedInput(String(seed))}
-                  onChange={(event) => setSeedInput(event.target.value)}
+                  onChange={(e) => setSeedInput(e.target.value)}
                 />
               </label>
               <button type="button" className="btn btn-secondary" onClick={handleRandomSelect}>
@@ -346,26 +421,62 @@ export function DatasetManagementPage() {
                 随机选择
               </button>
             </div>
-
             <div className="selection-meter">
               <div>
                 <span>当前选择</span>
-                <strong>{selectedBases.length} / {ionosphereDataset.baseCount}</strong>
+                <strong>{selectedBases.length} / {dataset.baseCount}</strong>
               </div>
               <div className="progress-track" aria-hidden="true">
                 <span style={{ width: `${selectedRatio}%` }} />
               </div>
             </div>
-
             <div className="selected-base-grid" aria-label="已选基础聚类">
               {selectedPreview.map((name) => (
                 <span key={name}>{name}</span>
               ))}
             </div>
           </section>
-        </div>
+        </main>
+      </div>
+    </div>
+  );
+}
 
-      </section>
+/* ========== 主组件 ========== */
+
+export function DatasetManagementPage() {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const activeDataset = selectedId
+    ? sampleDatasets.find((d) => d.id === selectedId) ?? null
+    : null;
+
+  function handleExampleLoad() {
+    setSelectedId('ionosphere');
+  }
+
+  return (
+    <>
+      {selectedId === null ? (
+        <DatasetCatalogView
+          datasets={sampleDatasets}
+          onSelect={setSelectedId}
+          onExampleLoad={handleExampleLoad}
+        />
+      ) : activeDataset ? (
+        <DatasetDetailView
+          dataset={activeDataset}
+          onBack={() => setSelectedId(null)}
+        />
+      ) : (
+        <DatasetCatalogView
+          datasets={sampleDatasets}
+          onSelect={setSelectedId}
+          onExampleLoad={handleExampleLoad}
+        />
+      )}
     </>
   );
 }
+
+export { sampleDatasets };

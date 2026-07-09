@@ -307,31 +307,53 @@ describe('dashboard homepage', () => {
     expect(within(breadcrumb).getByText('结果分析')).toBeInTheDocument();
   });
 
-  it('renders an interactive dataset management workflow prototype', async () => {
+  it('renders a multi-dataset catalog and navigates into detail view', async () => {
     renderApp('/workbench/datasets');
 
     expectGlobalStatusHeaderHidden();
 
-    const importPanel = screen.getByLabelText('导入基础聚类结果');
-    expect(importPanel).toHaveTextContent('CSV');
-    expect(importPanel).toHaveTextContent('JSON');
-    expect(importPanel).toHaveTextContent('Excel');
-    expect(importPanel).toHaveTextContent('MAT');
-    expect(importPanel).toHaveTextContent('NPZ');
-    expect(within(importPanel).getByText('E: 351 x 100')).toBeInTheDocument();
-    expect(within(importPanel).getByText('y: 351')).toBeInTheDocument();
+    // 目录视图：工具栏 + 表格
+    expect(screen.getByPlaceholderText('搜索数据集…')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '使用示例数据' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '上传数据集' })).toBeInTheDocument();
 
-    const statisticsPanel = screen.getByLabelText('查看基础聚类统计');
-    expect(within(statisticsPanel).getByText('base_1')).toBeInTheDocument();
-    expect(within(statisticsPanel).getAllByText('11').length).toBeGreaterThan(0);
-    expect(within(statisticsPanel).getByText('标签分布')).toBeInTheDocument();
+    expect(screen.getByText('Ionosphere 雷达数据')).toBeInTheDocument();
+    expect(screen.getByText('Wine 葡萄酒成分')).toBeInTheDocument();
+    expect(screen.getByText('Seeds 小麦种子')).toBeInTheDocument();
 
-    const selectionPanel = screen.getByLabelText('基础聚类随机选择');
-    await userEvent.clear(within(selectionPanel).getByLabelText('n_base'));
-    await userEvent.type(within(selectionPanel).getByLabelText('n_base'), '12');
-    await userEvent.click(within(selectionPanel).getByRole('button', { name: '随机选择' }));
-    expect(within(selectionPanel).getByText('12 / 100')).toBeInTheDocument();
-    expect(within(selectionPanel).getAllByText(/^base_/).length).toBe(12);
+    // 规模列 tabular-nums 数字存在
+    expect(screen.getByText('351 / 100 / 2')).toBeInTheDocument();
+
+    // 点 ionosphere 行进入详情
+    const ionosphereRow = screen.getByRole('button', { name: /Ionosphere 雷达/ });
+    await userEvent.click(ionosphereRow);
+
+    // 详情视图：顶栏 + 两栏
+    expect(screen.getByText('数据集 · Ionosphere 雷达数据')).toBeInTheDocument();
+    const backButton = screen.getByRole('button', { name: /返回/ });
+    expect(backButton).toBeInTheDocument();
+
+    // 左栏：元信息卡 + 规模卡 + 操作卡
+    expect(screen.getByText('基本信息')).toBeInTheDocument();
+    expect(screen.getByText('351')).toBeInTheDocument();
+
+    // 右栏：标签分布 + 基础聚类统计 + 选择
+    expect(screen.getByText('标签分布')).toBeInTheDocument();
+    expect(screen.getByText('基础聚类统计')).toBeInTheDocument();
+    expect(screen.getByText('选择基础聚类')).toBeInTheDocument();
+    expect(screen.getAllByText('base_1').length).toBeGreaterThan(0);
+
+    // 选择交互
+    const nBaseInput = screen.getByLabelText('n_base');
+    await userEvent.clear(nBaseInput);
+    await userEvent.type(nBaseInput, '12');
+    await userEvent.click(screen.getByRole('button', { name: '随机选择' }));
+    expect(screen.getByText('12 / 100')).toBeInTheDocument();
+    expect(screen.getAllByText(/^base_/).length).toBeGreaterThanOrEqual(12);
+
+    // 返回目录
+    await userEvent.click(backButton);
+    expect(screen.getByText('Ionosphere 雷达数据')).toBeInTheDocument();
   });
 
   it('redirects legacy evaluation and visualization routes into results analysis', async () => {

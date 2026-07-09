@@ -22,32 +22,33 @@ function getProperty(rule: string, property: string) {
 }
 
 describe('dataset management layout styles', () => {
-  it('uses a dense workflow layout for the four dataset actions', () => {
-    const workflowRule = getRule('.dataset-workflow-grid');
-    const importPanelRule = getRule('.dataset-import-panel');
-    const statisticsRule = getRule('.dataset-statistics-panel');
-    const selectionRule = getRule('.dataset-selection-panel');
+  it('uses a dense catalog table layout with row expansion', () => {
+    const catalogRule = getRule('.dataset-catalog');
+    const toolbarRule = getRule('.dataset-toolbar');
+    const tableRule = getRule('.dataset-table');
+    const rowRule = getRule('.dataset-row');
 
-    expect(getProperty(workflowRule, 'display')).toBe('grid');
-    expect(getProperty(workflowRule, 'grid-template-columns')).toBe(
-      'minmax(360px, 1fr) minmax(440px, 1fr)',
-    );
-    expect(getProperty(workflowRule, 'gap')).toBe('12px');
-    expect(getProperty(importPanelRule, 'min-height')).toBe('100%');
-    expect(getProperty(statisticsRule, 'min-height')).toBe('100%');
-    expect(getProperty(selectionRule, 'min-height')).toBe('100%');
+    expect(getProperty(catalogRule, 'flex-direction')).toBe('column');
+    expect(getProperty(toolbarRule, 'display')).toBe('flex');
+    expect(getProperty(toolbarRule, 'border')).toContain('var(--app-border)');
+    expect(getProperty(tableRule, 'border')).toContain('var(--app-border)');
+    expect(getProperty(tableRule, 'border-radius')).toBe('0 0 var(--panel-radius) var(--panel-radius)');
+    expect(getProperty(rowRule, 'grid-template-columns')).toContain('minmax(160px, 2fr)');
+    expect(getProperty(rowRule, 'cursor')).toBe('pointer');
   });
 
-  it('styles upload, selection chips and task draft as tool surfaces', () => {
-    const dropzoneRule = getRule('.dataset-dropzone');
-    const chipGridRule = getRule('.selected-base-grid');
-    const taskDraftRule = getRule('.task-draft-card');
+  it('styles the detail two-column layout and shared selection surfaces', () => {
+    const shellRule = getRule('.dataset-detail-shell');
+    const layoutRule = getRule('.dataset-detail-layout');
+    const sidebarRule = getRule('.dataset-detail-sidebar');
+    const cardRule = getRule('.dataset-detail-card');
+    const dangerBtnRule = getRule('.btn.btn-danger');
 
-    expect(getProperty(dropzoneRule, 'border')).toBe('1px dashed var(--primary-30)');
-    expect(getProperty(dropzoneRule, 'background')).toBe('var(--primary-8)');
-    expect(getProperty(chipGridRule, 'grid-template-columns')).toBe(
-      'repeat(auto-fill, minmax(74px, 1fr))',
-    );
-    expect(getProperty(taskDraftRule, 'border')).toBe('1px solid var(--primary-30)');
+    expect(getProperty(shellRule, 'flex-direction')).toBe('column');
+    expect(getProperty(layoutRule, 'grid-template-columns')).toBe('320px 1fr');
+    expect(getProperty(sidebarRule, 'flex-direction')).toBe('column');
+    expect(getProperty(cardRule, 'border')).toContain('var(--app-border)');
+    expect(getProperty(cardRule, 'background')).toBe('var(--app-surface)');
+    expect(getProperty(dangerBtnRule, 'color')).toBe('var(--error-color)');
   });
 });
