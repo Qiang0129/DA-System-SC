@@ -51,4 +51,18 @@ describe('dataset management layout styles', () => {
     expect(getProperty(cardRule, 'background')).toBe('var(--app-surface)');
     expect(getProperty(dangerBtnRule, 'color')).toBe('var(--error-color)');
   });
+
+  it('styles the card grid and view toggle segment', () => {
+    const gridRule = getRule('.dataset-card-grid');
+    const cardRule = getRule('.dataset-card');
+    const segmentRule = getRule('.dataset-toolbar-segment');
+    const viewBtnRule = getRule('.dataset-view-btn');
+
+    expect(getProperty(gridRule, 'display')).toBe('grid');
+    expect(getProperty(gridRule, 'grid-template-columns')).toBe('repeat(3, minmax(0, 1fr))');
+    expect(getProperty(cardRule, 'cursor')).toBe('pointer');
+    expect(getProperty(segmentRule, 'display')).toBe('flex');
+    expect(getProperty(viewBtnRule, 'display')).toBe('flex');
+    expect(getProperty(viewBtnRule, 'justify-content')).toBe('center');
+  });
 });

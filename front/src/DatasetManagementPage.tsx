@@ -2,12 +2,15 @@ import { useMemo, useState } from 'react';
 import {
   ArrowLeft,
   Download,
+  Grid3x3,
+  List,
   Play,
-  RefreshCw,
   Search,
   Shuffle,
   Upload,
 } from 'lucide-react';
+
+const API = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api';
 
 type ClusterStat = {
   name: string;
@@ -122,37 +125,21 @@ const sampleDatasets: DatasetCatalogItem[] = [
   },
 ];
 
-const clusterStats = [
-  { name: 'base_1', clusterCount: 11, range: '1 - 11' },
-  { name: 'base_2', clusterCount: 16, range: '1 - 16' },
-  { name: 'base_3', clusterCount: 3, range: '1 - 3' },
-  { name: 'base_4', clusterCount: 9, range: '1 - 9' },
-  { name: 'base_5', clusterCount: 15, range: '1 - 15' },
-  { name: 'base_6', clusterCount: 14, range: '1 - 14' },
-  { name: 'base_7', clusterCount: 11, range: '1 - 11' },
-  { name: 'base_8', clusterCount: 2, range: '1 - 2' },
-];
-
 const defaultSelectedBases = Array.from({ length: 20 }, (_, index) => index + 1);
 
 function clamp(value: number, min: number, max: number) {
-  if (!Number.isFinite(value)) {
-    return min;
-  }
-
+  if (!Number.isFinite(value)) return min;
   return Math.min(max, Math.max(min, Math.round(value)));
 }
 
 function selectBases(total: number, count: number, seed: number) {
   const ids = Array.from({ length: total }, (_, index) => index + 1);
   let state = Math.abs(Math.trunc(seed)) || 1;
-
   for (let index = ids.length - 1; index > 0; index -= 1) {
     state = (state * 1664525 + 1013904223) % 4294967296;
     const swapIndex = state % (index + 1);
     [ids[index], ids[swapIndex]] = [ids[swapIndex], ids[index]];
   }
-
   return ids.slice(0, count).sort((left, right) => left - right);
 }
 
@@ -160,16 +147,71 @@ function formatBaseName(id: number) {
   return `base_${id}`;
 }
 
+/* ========== 卡片网格视图 ========== */
+
+function DatasetCardGrid({
+  datasets,
+  onSelect,
+}: {
+  datasets: DatasetCatalogItem[];
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <div className="dataset-card-grid">
+      {datasets.length === 0 ? (
+        <div className="dataset-table-empty">暂无匹配数据集</div>
+      ) : (
+        datasets.map((d) => (
+          <div
+            key={d.id}
+            className="dataset-card"
+            role="button"
+            tabIndex={0}
+            onClick={() => onSelect(d.id)}
+            onKeyDown={(e) => { if (e.key === 'Enter') onSelect(d.id); }}
+          >
+            <div className="dataset-card-header">
+              <strong>{d.name}</strong>
+              <small>{d.createdAt}</small>
+            </div>
+            <div className="dataset-card-body">
+              <div className="dataset-card-sizes">
+                <div><span>n</span><strong>{d.sampleCount}</strong></div>
+                <div><span>m</span><strong>{d.baseCount}</strong></div>
+                <div><span>c</span><strong>{d.classCount}</strong></div>
+              </div>
+            </div>
+            <div className="dataset-card-footer">
+              <span className={`dataset-status-dot ${d.hasLabels ? 'has-labels' : ''}`} aria-hidden="true" />
+              <span>{d.hasLabels ? '有标签' : '无标签'}</span>
+              <span className="dataset-type-tag">{d.dataType}</span>
+              {d.taskCount > 0 ? (
+                <small className="dataset-card-task-count">{d.taskCount} 任务</small>
+              ) : null}
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
 /* ========== 目录视图 ========== */
 
 function DatasetCatalogView({
   datasets,
+  viewMode,
   onSelect,
-  onExampleLoad,
+  onToggleView,
+  onUpload,
+  uploading,
 }: {
   datasets: DatasetCatalogItem[];
+  viewMode: 'list' | 'card';
   onSelect: (id: string) => void;
-  onExampleLoad: () => void;
+  onToggleView: () => void;
+  onUpload: () => void;
+  uploading: boolean;
 }) {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<'全部' | '数值' | '混合'>('全部');
@@ -201,6 +243,7 @@ function DatasetCatalogView({
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
+
         <div className="dataset-toolbar-center">
           <select
             className="dataset-type-select"
@@ -213,62 +256,87 @@ function DatasetCatalogView({
             <option value="混合">混合</option>
           </select>
         </div>
-        <div className="dataset-toolbar-right">
-          <button type="button" className="btn btn-secondary" onClick={onExampleLoad}>
-            <RefreshCw size={15} aria-hidden="true" />
-            使用示例数据
+
+        <div className="dataset-toolbar-segment">
+          <button
+            type="button"
+            className={`dataset-view-btn ${viewMode === 'list' ? 'active' : ''}`}
+            onClick={() => { if (viewMode !== 'list') onToggleView(); }}
+            aria-label="列表视图"
+          >
+            <List size={15} />
           </button>
-          <button type="button" className="btn btn-primary" onClick={() => {}}>
+          <button
+            type="button"
+            className={`dataset-view-btn ${viewMode === 'card' ? 'active' : ''}`}
+            onClick={() => { if (viewMode !== 'card') onToggleView(); }}
+            aria-label="卡片视图"
+          >
+            <Grid3x3 size={15} />
+          </button>
+        </div>
+
+        <div className="dataset-toolbar-right">
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={onUpload}
+            disabled={uploading}
+          >
             <Upload size={15} aria-hidden="true" />
-            上传数据集
+            {uploading ? '加载中…' : '上传数据集'}
           </button>
         </div>
       </div>
 
-      <div className="dataset-table">
-        <div className="dataset-table-header">
-          <span className="dataset-col-name">数据集</span>
-          <span className="dataset-col-size">规模 n / m / c</span>
-          <span className="dataset-col-status">状态 / 类型</span>
-          <span className="dataset-col-usage">使用情况</span>
-          <span className="dataset-col-enter" />
+      {viewMode === 'list' ? (
+        <div className="dataset-table">
+          <div className="dataset-table-header">
+            <span className="dataset-col-name">数据集</span>
+            <span className="dataset-col-size">规模 n / m / c</span>
+            <span className="dataset-col-status">状态 / 类型</span>
+            <span className="dataset-col-usage">使用情况</span>
+            <span className="dataset-col-enter" />
+          </div>
+          {filtered.length === 0 ? (
+            <div className="dataset-table-empty">暂无匹配数据集</div>
+          ) : (
+            filtered.map((d) => (
+              <div
+                key={d.id}
+                className="dataset-row"
+                role="button"
+                tabIndex={0}
+                onClick={() => onSelect(d.id)}
+                onKeyDown={(e) => { if (e.key === 'Enter') onSelect(d.id); }}
+              >
+                <span className="dataset-col-name">
+                  <strong>{d.name}</strong>
+                  <small>{d.createdAt}</small>
+                </span>
+                <span className="dataset-col-size">
+                  <code>{d.sampleCount} / {d.baseCount} / {d.classCount}</code>
+                </span>
+                <span className="dataset-col-status">
+                  <span className={`dataset-status-dot ${d.hasLabels ? 'has-labels' : ''}`} aria-hidden="true" />
+                  {d.hasLabels ? '有标签' : '无标签'}
+                  <span className="dataset-type-tag">{d.dataType}</span>
+                </span>
+                <span className="dataset-col-usage">
+                  {d.taskCount > 0 ? (
+                    <>{d.taskCount} 任务 · {d.lastAnalysisAt}</>
+                  ) : (
+                    <span className="dataset-usage-empty">未使用</span>
+                  )}
+                </span>
+                <span className="dataset-col-enter" aria-hidden="true">&rsaquo;</span>
+              </div>
+            ))
+          )}
         </div>
-        {filtered.length === 0 ? (
-          <div className="dataset-table-empty">暂无匹配数据集</div>
-        ) : (
-          filtered.map((d) => (
-            <div
-              key={d.id}
-              className="dataset-row"
-              role="button"
-              tabIndex={0}
-              onClick={() => onSelect(d.id)}
-              onKeyDown={(e) => { if (e.key === 'Enter') onSelect(d.id); }}
-            >
-              <span className="dataset-col-name">
-                <strong>{d.name}</strong>
-                <small>{d.createdAt}</small>
-              </span>
-              <span className="dataset-col-size">
-                <code>{d.sampleCount} / {d.baseCount} / {d.classCount}</code>
-              </span>
-              <span className="dataset-col-status">
-                <span className={`dataset-status-dot ${d.hasLabels ? 'has-labels' : ''}`} aria-hidden="true" />
-                {d.hasLabels ? '有标签' : '无标签'}
-                <span className="dataset-type-tag">{d.dataType}</span>
-              </span>
-              <span className="dataset-col-usage">
-                {d.taskCount > 0 ? (
-                  <>{d.taskCount} 任务 · {d.lastAnalysisAt}</>
-                ) : (
-                  <span className="dataset-usage-empty">未使用</span>
-                )}
-              </span>
-              <span className="dataset-col-enter" aria-hidden="true">&rsaquo;</span>
-            </div>
-          ))
-        )}
-      </div>
+      ) : (
+        <DatasetCardGrid datasets={filtered} onSelect={onSelect} />
+      )}
     </div>
   );
 }
@@ -354,13 +422,17 @@ function DatasetDetailView({
           <section className="dataset-detail-section">
             <h3>标签分布</h3>
             <div className="dataset-stat-grid">
-              {dataset.labelDistribution.map((item) => (
-                <div className="label-distribution-row" key={item.label}>
-                  <strong>{item.label}</strong>
-                  <span>{item.count}</span>
-                  <i style={{ width: `${item.percent}%` }} aria-hidden="true" />
-                </div>
-              ))}
+              {dataset.labelDistribution.length === 0 ? (
+                <span className="dataset-usage-empty">暂无标签分布数据</span>
+              ) : (
+                dataset.labelDistribution.map((item) => (
+                  <div className="label-distribution-row" key={item.label}>
+                    <strong>{item.label}</strong>
+                    <span>{item.count}</span>
+                    <i style={{ width: `${item.percent}%` }} aria-hidden="true" />
+                  </div>
+                ))
+              )}
             </div>
           </section>
 
@@ -377,14 +449,22 @@ function DatasetDetailView({
                   </tr>
                 </thead>
                 <tbody>
-                  {dataset.clusterStats.map((stat) => (
-                    <tr key={stat.name}>
-                      <td>{stat.name}</td>
-                      <td>{stat.clusterCount}</td>
-                      <td>{stat.range}</td>
-                      <td>{selectedPreview.includes(stat.name) ? '已选' : '未选'}</td>
+                  {dataset.clusterStats.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="dataset-usage-empty" style={{ textAlign: 'center', padding: '20px' }}>
+                        暂无聚类统计
+                      </td>
                     </tr>
-                  ))}
+                  ) : (
+                    dataset.clusterStats.map((stat) => (
+                      <tr key={stat.name}>
+                        <td>{stat.name}</td>
+                        <td>{stat.clusterCount}</td>
+                        <td>{stat.range}</td>
+                        <td>{selectedPreview.includes(stat.name) ? '已选' : '未选'}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -446,22 +526,59 @@ function DatasetDetailView({
 
 export function DatasetManagementPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'card'>('list');
+  const [datasets, setDatasets] = useState<DatasetCatalogItem[]>(sampleDatasets);
+  const [uploading, setUploading] = useState(false);
 
   const activeDataset = selectedId
-    ? sampleDatasets.find((d) => d.id === selectedId) ?? null
+    ? datasets.find((d) => d.id === selectedId) ?? null
     : null;
 
-  function handleExampleLoad() {
-    setSelectedId('ionosphere');
+  async function handleUpload() {
+    setUploading(true);
+    try {
+      const res = await fetch(`${API}/datasets/example-mat`);
+      if (!res.ok) throw new Error('加载失败');
+      const data = await res.json();
+
+      const now = new Date().toISOString().slice(0, 10);
+      const id = `uploaded-${Date.now()}`;
+      const newDataset: DatasetCatalogItem = {
+        id,
+        name: 'Ionosphere (从 .mat 导入)',
+        createdAt: now,
+        sampleCount: data.sampleCount,
+        baseCount: data.baseCount,
+        classCount: 2,
+        hasLabels: data.hasLabels,
+        dataType: '数值',
+        taskCount: 0,
+        lastAnalysisAt: null,
+        matrixShape: `E: ${data.sampleCount} x ${data.baseCount}`,
+        labelShape: `y: ${data.sampleCount}`,
+        labelDistribution: [],
+        clusterStats: [],
+      };
+
+      setDatasets((prev) => [newDataset, ...prev]);
+      setSelectedId(id);
+    } catch (err) {
+      console.error('上传失败', err);
+    } finally {
+      setUploading(false);
+    }
   }
 
   return (
     <>
       {selectedId === null ? (
         <DatasetCatalogView
-          datasets={sampleDatasets}
+          datasets={datasets}
+          viewMode={viewMode}
           onSelect={setSelectedId}
-          onExampleLoad={handleExampleLoad}
+          onToggleView={() => setViewMode((v) => (v === 'list' ? 'card' : 'list'))}
+          onUpload={handleUpload}
+          uploading={uploading}
         />
       ) : activeDataset ? (
         <DatasetDetailView
@@ -470,9 +587,12 @@ export function DatasetManagementPage() {
         />
       ) : (
         <DatasetCatalogView
-          datasets={sampleDatasets}
+          datasets={datasets}
+          viewMode={viewMode}
           onSelect={setSelectedId}
-          onExampleLoad={handleExampleLoad}
+          onToggleView={() => setViewMode((v) => (v === 'list' ? 'card' : 'list'))}
+          onUpload={handleUpload}
+          uploading={uploading}
         />
       )}
     </>

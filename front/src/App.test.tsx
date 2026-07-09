@@ -314,14 +314,25 @@ describe('dashboard homepage', () => {
 
     // 目录视图：工具栏 + 表格
     expect(screen.getByPlaceholderText('搜索数据集…')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '使用示例数据' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '上传数据集' })).toBeInTheDocument();
+
+    // 列表/卡片切换按钮
+    expect(screen.getByRole('button', { name: '列表视图' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '卡片视图' })).toBeInTheDocument();
 
     expect(screen.getByText('Ionosphere 雷达数据')).toBeInTheDocument();
     expect(screen.getByText('Wine 葡萄酒成分')).toBeInTheDocument();
     expect(screen.getByText('Seeds 小麦种子')).toBeInTheDocument();
 
     // 规模列 tabular-nums 数字存在
+    expect(screen.getByText('351 / 100 / 2')).toBeInTheDocument();
+
+    // 切换到卡片视图
+    await userEvent.click(screen.getByRole('button', { name: '卡片视图' }));
+    // 卡片视图中仍能看到数据集名称
+    expect(screen.getByText('Ionosphere 雷达数据')).toBeInTheDocument();
+    // 切回列表
+    await userEvent.click(screen.getByRole('button', { name: '列表视图' }));
     expect(screen.getByText('351 / 100 / 2')).toBeInTheDocument();
 
     // 点 ionosphere 行进入详情
