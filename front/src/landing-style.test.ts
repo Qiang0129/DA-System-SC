@@ -99,7 +99,7 @@ describe('landing URL copy button styles', () => {
   it('aligns capability labels directly under enlarged icons', () => {
     const gridRule = getRule('.capability-mark-grid');
     const markRule = getRule('.capability-mark');
-    const iconRule = getRule('.capability-mark svg');
+    const iconRule = getRule('.capability-mark-icon');
     const labelRule = getRule('.capability-mark-label');
 
     expect(getProperty(gridRule, 'display')).toBe('grid');
@@ -108,19 +108,29 @@ describe('landing URL copy button styles', () => {
     expect(getProperty(markRule, 'align-items')).toBe('center');
     expect(getProperty(iconRule, 'width')).toBe('52px');
     expect(getProperty(iconRule, 'height')).toBe('52px');
+    expect(getProperty(iconRule, 'object-fit')).toBe('contain');
     expect(getProperty(labelRule, 'position')).toBe('static');
     expect(labelRule).not.toContain('clip: rect');
   });
 
-  it('renders the topbar version as a right-aligned glass pill', () => {
+  it('renders the topbar version as a right-aligned blue badge', () => {
     const versionRule = getRule('.landing-version-pill');
 
     expect(getProperty(versionRule, 'justify-self')).toBe('end');
     expect(getProperty(versionRule, 'border-radius')).toBe('999px');
-    expect(getProperty(versionRule, 'background')).toBe('rgba(255, 255, 255, 0.42)');
-    expect(getProperty(versionRule, 'backdrop-filter')).toBe('blur(14px) saturate(150%)');
-    expect(getProperty(versionRule, '-webkit-backdrop-filter')).toBe('blur(14px) saturate(150%)');
-    expect(getProperty(versionRule, 'box-shadow') ?? '').toContain('inset 0 1px 0');
+    expect(getProperty(versionRule, 'border')).toBe('1px solid rgba(64, 158, 255, 0.24)');
+    expect(getProperty(versionRule, 'background')).toBe('rgba(64, 158, 255, 0.12)');
+    expect(getProperty(versionRule, 'color')).toBe('#245f9f');
+    expect(getProperty(versionRule, 'box-shadow') ?? '').toContain('rgba(51, 126, 204, 0.45)');
+  });
+
+  it('provides motion feedback for the analysis workbench action', () => {
+    const buttonRule = getRule('.landing-link-button');
+
+    expect(getProperty(buttonRule, 'transition') ?? '').toContain('transform 180ms');
+    expect(css).toMatch(/\.landing-link-button:hover,\s*\.landing-link-button:focus-visible\s*\{[\s\S]*?transform:\s*translateY\(-2px\);/);
+    expect(css).toMatch(/\.landing-link-button:hover \.landing-link-button-icon,\s*\.landing-link-button:focus-visible \.landing-link-button-icon\s*\{[\s\S]*?transform:\s*translateX\(3px\);/);
+    expect(css).toContain('@media (prefers-reduced-motion: reduce)');
   });
 
   it('renders the auth card as a glassmorphism surface', () => {
@@ -142,6 +152,39 @@ describe('landing URL copy button styles', () => {
     expect(getProperty(authSubtitleRule, 'color')).toBe('rgba(71, 85, 105, 0.74)');
     expect(getProperty(authSwitchRule, 'color')).toBe('rgba(71, 85, 105, 0.72)');
     expect(getProperty(authBackRule, 'color')).toBe('rgba(71, 85, 105, 0.64)');
+  });
+
+  it('gives auth submit buttons a compact interactive loading state', () => {
+    const submitRule = getRule('.auth-submit');
+    const activeRule = getRule('.auth-submit:not(:disabled):active');
+    const spinnerRule = getRule('.auth-submit-spinner');
+    const spinKeyframes = getKeyframes('auth-submit-spin');
+    const reducedMotion = getReducedMotionBlock();
+
+    expect(getProperty(submitRule, 'border-radius')).toBe('8px');
+    expect(getProperty(submitRule, 'min-height')).toBe('46px');
+    expect(getProperty(submitRule, 'transition') ?? '').toContain('transform 180ms');
+    expect(getProperty(activeRule, 'transform')).toBe('translateY(1px) scale(0.985)');
+    expect(getProperty(spinnerRule, 'animation')).toBe('auth-submit-spin 720ms linear infinite');
+    expect(spinKeyframes).toContain('rotate(360deg)');
+    expect(reducedMotion).toContain('.auth-submit-spinner');
+  });
+
+  it('uses a horizontal 3D flip for login and register card switching', () => {
+    const flipRule = getRule('.auth-flip');
+    const innerRule = getRule('.auth-flip-inner');
+    const flippedRule = getRule('.auth-flip.is-flipped .auth-flip-inner');
+    const faceRule = getRule('.auth-flip-face');
+    const backRule = getRule('.auth-flip-back');
+    const reducedMotion = getReducedMotionBlock();
+
+    expect(getProperty(flipRule, 'perspective')).toBe('1600px');
+    expect(getProperty(innerRule, 'transform-style')).toBe('preserve-3d');
+    expect(getProperty(innerRule, 'transition') ?? '').toContain('transform 620ms');
+    expect(getProperty(flippedRule, 'transform')).toBe('rotateY(180deg)');
+    expect(getProperty(faceRule, 'backface-visibility')).toBe('hidden');
+    expect(getProperty(backRule, 'transform')).toBe('rotateY(180deg)');
+    expect(reducedMotion).toContain('.auth-flip-inner');
   });
 
   it('renders the auth background image as a viewport-adaptive cover', () => {
@@ -177,6 +220,7 @@ describe('landing URL copy button styles', () => {
     expect(getProperty(addressRule, 'font-size')).toBe('15px');
     expect(getProperty(addressRule, 'font-weight')).toBe('400');
     expect(getProperty(addressRule, 'color')).toBe('var(--app-text-primary)');
+    expect(getProperty(addressRule, 'overflow')).toBe('visible');
 
     expect(getProperty(endpointRule, 'font-size')).toBe('14px');
     expect(getProperty(endpointRule, 'font-weight')).toBe('600');
@@ -187,11 +231,32 @@ describe('landing URL copy button styles', () => {
     );
   });
 
+  it('keeps the workbench SVG aligned with the analysis workbench action', () => {
+    const iconRule = getRule('.landing-link-button-icon');
+
+    expect(getProperty(iconRule, 'width')).toBe('16px');
+    expect(getProperty(iconRule, 'height')).toBe('16px');
+    expect(getProperty(iconRule, 'flex')).toBe('0 0 16px');
+    expect(getProperty(iconRule, 'filter')).toBe('brightness(0) invert(1)');
+  });
+
   it('keeps the animated endpoint anchored to the same baseline', () => {
     const endpointKeyframes = getKeyframes('base-url-endpoint-enter');
 
     expect(endpointKeyframes).not.toContain('translateY');
     expect(endpointKeyframes).not.toContain('transform:');
+  });
+
+  it('hides the landing viewport scrollbar while keeping scrolling enabled', () => {
+    // 视觉上隐藏滚动条（保留滚动功能），且作用域只锁首页 LandingPage 挂载时。
+    expect(css).toContain('body.landing-scroll-hidden');
+    expect(css).toContain('scrollbar-width: none');
+    expect(css).toContain('::-webkit-scrollbar');
+
+    // 这条规则不许引入 overflow: hidden，否则会锁死视口滚动。
+    const bodyRule = getRule('body.landing-scroll-hidden');
+    expect(bodyRule).not.toContain('overflow: hidden');
+    expect(bodyRule).not.toContain('overflow-y: hidden');
   });
 
   it('animates auth route entry and preserves reduced-motion support', () => {

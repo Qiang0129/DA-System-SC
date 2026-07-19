@@ -50,7 +50,16 @@ def _objective(kernel_consensus, z, s, a_list, alpha, lam, gamma, eye):
     return float(np.real(obj))
 
 
-def _solve(a_list, lam, gamma, clu, max_iter=20, gam=1.5, tol_factor=1e-2):
+def _solve(
+    a_list,
+    lam,
+    gamma,
+    clu,
+    max_iter=20,
+    gam=1.5,
+    tol_factor=1e-2,
+    progress_callback=None,
+):
     if not isinstance(a_list, (list, tuple)):
         raise TypeError('a_list must be a list/tuple of kernel matrices')
     a_list = [np.asarray(a, dtype=float) for a in a_list]
@@ -67,7 +76,7 @@ def _solve(a_list, lam, gamma, clu, max_iter=20, gam=1.5, tol_factor=1e-2):
     h, _, _ = eig1(l, int(clu), is_max=False, is_sym=True)
     obj = []
 
-    for _ in range(max_iter):
+    for iteration in range(1, max_iter + 1):
         inv_sqrt = _safe_inv_sqrt_diag_from_sums(z)
         g = inv_sqrt[:, None] * s
         lhs = 2 * kernel_consensus + 2 * float(lam) * eye
@@ -96,28 +105,48 @@ def _solve(a_list, lam, gamma, clu, max_iter=20, gam=1.5, tol_factor=1e-2):
         h, _, _ = eig1(lz, int(clu), is_max=False, is_sym=True)
         current = _objective(kernel_consensus, z, s, a_list, alpha, float(lam), float(gamma), eye)
         obj.append(current)
+        if progress_callback is not None:
+            progress_callback(iteration, current)
         if len(obj) >= 2 and abs(obj[-1] - obj[-2]) < tol_factor * max(abs(obj[-1]), 1e-12):
             break
     return s, z, kernel_consensus, alpha, np.array(obj)
 
 
-def solver_aktec1(a_list, lam, gamma, clu, max_iter=20, return_obj=False):
+def solver_aktec1(a_list, lam, gamma, clu, max_iter=20, return_obj=False, progress_callback=None):
     """Python version of ``solver_AKTEC1.m``.
 
     Returns ``(S, Z, K)`` by default, matching the MATLAB output order.
     """
-    s, z, k, alpha, obj = _solve(a_list, lam, gamma, clu, max_iter=max_iter, gam=1.5, tol_factor=1e-2)
+    s, z, k, alpha, obj = _solve(
+        a_list,
+        lam,
+        gamma,
+        clu,
+        max_iter=max_iter,
+        gam=1.5,
+        tol_factor=1e-2,
+        progress_callback=progress_callback,
+    )
     if return_obj:
         return s, z, k, alpha, obj
     return s, z, k
 
 
-def solver_aktec_large(a_list, lam, gamma, clu, max_iter=10, return_obj=False):
+def solver_aktec_large(a_list, lam, gamma, clu, max_iter=10, return_obj=False, progress_callback=None):
     """Python version of ``solver_AKTEC_large.m``.
 
     Returns ``(S, Z, alpha)`` by default, matching the MATLAB output order.
     """
-    s, z, k, alpha, obj = _solve(a_list, lam, gamma, clu, max_iter=max_iter, gam=1.4, tol_factor=1e-1)
+    s, z, k, alpha, obj = _solve(
+        a_list,
+        lam,
+        gamma,
+        clu,
+        max_iter=max_iter,
+        gam=1.4,
+        tol_factor=1e-1,
+        progress_callback=progress_callback,
+    )
     if return_obj:
         return s, z, alpha, obj
     return s, z, alpha

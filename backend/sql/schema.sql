@@ -60,16 +60,22 @@ CREATE TABLE IF NOT EXISTS analysis_tasks (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   user_id BIGINT UNSIGNED NOT NULL,
   dataset_id BIGINT UNSIGNED NOT NULL,
+  name VARCHAR(128) NOT NULL DEFAULT '',
   mode VARCHAR(32) NOT NULL,
-  status VARCHAR(32) NOT NULL DEFAULT 'queued',
+  status VARCHAR(32) NOT NULL DEFAULT 'draft',
   progress DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+  current_run INT UNSIGNED NOT NULL DEFAULT 0,
   current_iter INT UNSIGNED NOT NULL DEFAULT 0,
   max_iter INT UNSIGNED NOT NULL DEFAULT 20,
   params_json JSON NOT NULL,
   error_message TEXT NULL,
+  failure_reason VARCHAR(64) NULL,
+  current_stage VARCHAR(64) NULL,
+  queued_at DATETIME NULL,
   started_at DATETIME NULL,
   finished_at DATETIME NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_analysis_tasks_user_id (user_id),
   KEY idx_analysis_tasks_dataset_id (dataset_id),
@@ -83,8 +89,24 @@ CREATE TABLE IF NOT EXISTS analysis_tasks (
     ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS task_templates (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  name VARCHAR(128) NOT NULL,
+  mode VARCHAR(32) NOT NULL DEFAULT 'OMELET-SV',
+  params_json JSON NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_task_templates_user_id (user_id),
+  KEY idx_task_templates_created_at (created_at),
+  CONSTRAINT fk_task_templates_user_id
+    FOREIGN KEY (user_id) REFERENCES users(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS task_results (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  schema_version INT NULL,
   task_id BIGINT UNSIGNED NOT NULL,
   metrics_json JSON NULL,
   kernel_weights_json JSON NULL,
@@ -107,6 +129,9 @@ CREATE TABLE IF NOT EXISTS task_exports (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   task_id BIGINT UNSIGNED NOT NULL,
   export_type VARCHAR(32) NOT NULL,
+  name VARCHAR(128) NULL,
+  items_json JSON NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'ready',
   filename VARCHAR(255) NOT NULL,
   storage_path VARCHAR(500) NOT NULL,
   file_size BIGINT UNSIGNED NULL,

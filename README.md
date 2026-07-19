@@ -101,6 +101,8 @@ backend/
 
 ## 快速开始
 
+前后端需要分别在两个终端中启动。以下命令以当前 Windows 项目路径为例。
+
 ### 1. 前端启动
 
 要求：
@@ -108,10 +110,11 @@ backend/
 1. Node.js 18 或更高版本
 2. npm
 
-命令：
+在第一个 PowerShell 终端执行：
 
-```bash
-cd front
+```powershell
+cd "F:\研究生阶段\实验室项目\soft_web\front"
+# 首次运行时安装依赖，后续启动可跳过此命令
 npm install
 npm run dev
 ```
@@ -140,14 +143,23 @@ mysql -u root -p < backend/sql/schema.sql
 1. 编辑 `backend/config/database.env`
 2. 根据本地环境修改 `DB_HOST`、`DB_PORT`、`DB_NAME`、`DB_USER`、`DB_PASSWORD`
 
-安装并启动后端：
+在第二个 PowerShell 终端执行：
 
-```bash
-cd backend
+```powershell
+cd "F:\研究生阶段\实验室项目\soft_web\backend"
+# 首次运行时创建虚拟环境，后续启动可跳过此命令
 python -m venv .venv
-.venv\Scripts\activate
+.\.venv\Scripts\Activate.ps1
+# 首次运行时安装依赖，依赖更新后再重新执行
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
+```
+
+如果 PowerShell 阻止虚拟环境激活，可以直接使用虚拟环境中的 Python 启动：
+
+```powershell
+cd "F:\研究生阶段\实验室项目\soft_web\backend"
+.\.venv\Scripts\python.exe -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 健康检查地址：
@@ -179,16 +191,30 @@ python OMELET_SV.py --runs 1 --lambda-values 5 --gamma-values 5 --sigma-powers 0
    分析工作台首页
 5. `/workbench/datasets`
    数据管理
-6. `/workbench/tasks`
+6. `/workbench/data-quality`
+   数据质量检查
+7. `/workbench/dataset-versions`
+   数据版本记录
+8. `/workbench/tasks`
    任务中心
-7. `/workbench/ca-matrix`
+9. `/workbench/ca-matrix`
    CA 协关联矩阵分析
-8. `/workbench/mkl`
+10. `/workbench/kernel-config`
+    核函数配置
+11. `/workbench/mkl`
    多核相似性学习
-9. `/workbench/results`
+12. `/workbench/evaluation`
+    性能评估
+13. `/workbench/visualization`
+    可视化展示
+14. `/workbench/results`
    结果分析
-10. `/workbench/export`
+15. `/workbench/export`
     结果导出
+16. `/workbench/reports`
+    分析报告
+17. `/workbench/logs`
+    运行日志
 
 ## 后端接口现状
 

@@ -4,27 +4,35 @@ import * as echarts from 'echarts';
 import type { EChartsOption } from 'echarts';
 import type { LucideIcon } from 'lucide-react';
 import {
+  Activity,
+  Archive,
   BarChart3,
-  Bell,
   Boxes,
   CheckCircle2,
+  Clock3,
   ChevronLeft,
   ChevronRight,
-  ClipboardList,
   Database,
   Download,
+  FileArchive,
+  FileJson,
+  FileSpreadsheet,
   FileText,
   FlaskConical,
   Gauge,
   GitBranch,
+  Info,
   LayoutGrid,
   LogOut,
   Menu,
   Network,
+  Pause,
   Play,
   RefreshCw,
-  Search,
-  Settings,
+  Save,
+  SlidersHorizontal,
+  Target,
+  TrendingDown,
   Upload,
 } from 'lucide-react';
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
@@ -34,6 +42,26 @@ import { LandingPage } from './LandingPage';
 import { AuthFlipCard } from './AuthPages';
 import { AppBackground } from './AppBackground';
 import { DatasetManagementPage } from './DatasetManagementPage';
+import { DataQualityPage } from './workbench/data-quality/DataQualityPage';
+import { DatasetVersionsPage } from './workbench/dataset-versions/DatasetVersionsPage';
+import { TaskCenterPage } from './workbench/tasks/TaskCenterPage';
+import {
+  WorkbenchMetricStrip,
+  WorkbenchNotice,
+  WorkbenchPageHeader,
+  WorkbenchProgress,
+  WorkbenchSectionHeader,
+  WorkbenchStatus,
+} from './workbench/WorkbenchUi';
+import {
+  KernelConfigPage,
+  OperationLogsPage,
+  PerformanceEvaluationPage,
+  ReportCenterPage,
+  VisualizationShowcasePage,
+} from './workbench/SoftCopyrightPages';
+import { TaskResultViews } from './workbench/results/TaskResultViews';
+import { useTaskResult } from './workbench/results/useTaskResult';
 import {
   clearAuthSession,
   getCurrentUser,
@@ -41,6 +69,7 @@ import {
   logout as logoutFromApi,
   type AuthUser,
 } from './api/auth';
+import { API_BASE_URL } from './api/config';
 import {
   dashboardGroups,
   dashboardNavItems,
@@ -49,6 +78,18 @@ import {
   legacyWorkbenchRedirects,
   type DashboardGroupKey,
 } from './dashboard/navigation';
+
+const API = API_BASE_URL;
+
+function downloadTextFile(filename: string, content: string, type = 'text/plain;charset=utf-8') {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
 
 type SummaryCard = {
   label: string;
@@ -71,7 +112,7 @@ type PipelineStep = {
 };
 
 type SelectableChartKey = 'kernelWeights' | 'topologyAffinity';
-
+type BackendStatus = 'checking' | 'online' | 'offline';
 const summaryCards: SummaryCard[] = [
   {
     label: '样本数 n',
@@ -363,6 +404,20 @@ function Sidebar({
   open: boolean;
   onClose: () => void;
 }) {
+  const location = useLocation();
+  const taskId = new URLSearchParams(location.search).get('taskId');
+  const resultPaths = new Set([
+    '/workbench/analysis',
+    '/workbench/ca-matrix',
+    '/workbench/kernel-config',
+    '/workbench/mkl',
+    '/workbench/evaluation',
+    '/workbench/visualization',
+    '/workbench/results',
+    '/workbench/export',
+    '/workbench/reports',
+    '/workbench/logs',
+  ]);
   return (
     <>
       <button
@@ -376,7 +431,14 @@ function Sidebar({
       <aside className={`sidebar ${open ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`}>
         <div className="sidebar-brand" title="OMELET Lab">
           <span className="brand-logo" aria-hidden="true">
-            <img className="sidebar-brand-logo-image" src={sidebarBrandLogo} alt="" aria-hidden="true" />
+            <img
+              className="sidebar-brand-logo-image"
+              src={sidebarBrandLogo}
+              width={30}
+              height={30}
+              alt=""
+              aria-hidden="true"
+            />
           </span>
           <span className="brand-copy">
             <strong translate="no">OMELET Lab</strong>
@@ -397,7 +459,7 @@ function Sidebar({
                   return (
                     <NavLink
                       key={item.label}
-                      to={item.path}
+                      to={resultPaths.has(item.path) && taskId ? `${item.path}?taskId=${encodeURIComponent(taskId)}` : item.path}
                       aria-current={isActive ? 'page' : undefined}
                       className={({ isActive: routeIsActive }) =>
                         `nav-item ${routeIsActive ? 'active' : ''}`
@@ -422,13 +484,21 @@ function Sidebar({
 
 function TopHeader({
   activeSection,
+  analysisContext,
+  backendStatus,
+  currentUser,
   onToggleMobileNav,
   onLogout,
 }: {
   activeSection: string;
+  analysisContext: string;
+  backendStatus: BackendStatus;
+  currentUser: AuthUser | null;
   onToggleMobileNav: () => void;
   onLogout: () => void;
 }) {
+  const username = currentUser?.username || '研究用户';
+
   return (
     <header className="main-header">
       <div className="navbar-left">
@@ -440,61 +510,77 @@ function TopHeader({
         >
           <Menu size={18} />
         </button>
-        <nav className="breadcrumb" aria-label="当前位置">
-          <span>工作台</span>
+        <div className="header-context">
+          <span>OMELET 工作台</span>
           <ChevronRight size={14} aria-hidden="true" />
-          <strong>{activeSection}</strong>
-        </nav>
+          <div className="header-section-title" aria-label="当前模块">
+            {activeSection}
+          </div>
+        </div>
       </div>
 
       <div className="navbar-right">
-        <label className="search-box">
-          <Search size={16} aria-hidden="true" />
-          <input
-            type="search"
-            name="dashboardSearch"
-            placeholder="搜索任务、矩阵或指标…"
-            autoComplete="off"
-            aria-label="搜索任务、矩阵或指标"
-          />
-        </label>
-        <button type="button" className="header-icon-button" aria-label="刷新仪表盘">
-          <RefreshCw size={16} />
-        </button>
-        <button type="button" className="header-icon-button" aria-label="通知中心">
-          <Bell size={16} />
-        </button>
-        <button type="button" className="header-icon-button" aria-label="系统设置">
-          <Settings size={16} />
-        </button>
-        <button type="button" className="header-icon-button" aria-label="退出登录" onClick={onLogout}>
-          <LogOut size={16} />
+        <div className="header-run-context" title="当前分析上下文">
+          <Database size={14} aria-hidden="true" />
+          <span>{analysisContext}</span>
+        </div>
+        <span
+          className={`header-service-state ${backendStatus}`}
+          title={backendStatus === 'online' ? 'Python 服务正常' : backendStatus === 'offline' ? 'Python 服务异常' : '正在检查 Python 服务'}
+          aria-label={backendStatus === 'online' ? 'Python 服务正常' : backendStatus === 'offline' ? 'Python 服务异常' : '正在检查 Python 服务'}
+        />
+        <div className="header-user" title={`当前用户：${username}`}>
+          <span className="header-user-avatar" aria-hidden="true">
+            {username.slice(0, 1).toUpperCase()}
+          </span>
+          <span>{username}</span>
+        </div>
+        <button
+          type="button"
+          className="header-icon-button"
+          aria-label="退出登录"
+          title="退出登录"
+          onClick={onLogout}
+        >
+          <LogOut size={16} aria-hidden="true" />
         </button>
       </div>
     </header>
   );
 }
 
-function StatusHeader() {
+function StatusHeader({
+  status,
+  onImportData,
+  onCreateTask,
+}: {
+  status: BackendStatus;
+  onImportData: () => void;
+  onCreateTask: () => void;
+}) {
+  const statusText =
+    status === 'online' ? 'FastAPI 已连接' : status === 'offline' ? 'FastAPI 连接异常' : '正在检查 FastAPI…';
+  const statusClass = status === 'online' ? 'success' : status === 'offline' ? 'error' : 'warning';
+
   return (
     <section className="status-header" aria-label="系统连接状态">
       <div className="status-left">
-        <span className="status-dot warning" aria-hidden="true" />
+        <span className={`status-dot ${statusClass}`} aria-hidden="true" />
         <div>
           <span className="status-label">Python 服务</span>
-          <strong>等待 FastAPI 接入</strong>
+          <strong>{statusText}</strong>
         </div>
       </div>
       <div className="status-meta">
         <span>服务地址</span>
-        <strong>http://localhost:8000</strong>
+        <strong>{API.replace(/\/api\/?$/, '')}</strong>
       </div>
       <div className="status-actions">
-        <button type="button" className="btn btn-secondary">
+        <button type="button" className="btn btn-secondary" onClick={onImportData}>
           <Upload size={16} aria-hidden="true" />
           导入数据
         </button>
-        <button type="button" className="btn btn-primary">
+        <button type="button" className="btn btn-primary" onClick={onCreateTask}>
           <Play size={16} aria-hidden="true" />
           创建任务
         </button>
@@ -841,10 +927,10 @@ function TaskPanel() {
 
 function ExportPanel() {
   const actions = [
-    ['导出标签', '表格'],
-    ['导出指标', '工作簿'],
-    ['导出图像', '图片'],
-    ['生成报告', '文档'],
+    ['导出标签', 'CSV', 'omelet-labels.csv', 'sample_id,cluster\nS1,1\nS2,1\nS3,2'],
+    ['导出指标', 'CSV', 'omelet-metrics.csv', 'metric,value\nACC,91.2%\nNMI,86.4%\nARI,82.7%\nF1,88.0%'],
+    ['导出参数', 'JSON', 'omelet-config.json', JSON.stringify(Object.fromEntries(taskParams), null, 2)],
+    ['生成摘要', 'TXT', 'omelet-summary.txt', 'Ionosphere / OMELET-SV\nACC 91.2%\nNMI 86.4%\n运行耗时 18.4s'],
   ];
 
   return (
@@ -858,8 +944,8 @@ function ExportPanel() {
       </div>
 
       <div className="export-actions">
-        {actions.map(([label, format]) => (
-          <button type="button" key={label}>
+        {actions.map(([label, format, filename, content]) => (
+          <button type="button" key={label} onClick={() => downloadTextFile(filename, content)}>
             <Download size={16} aria-hidden="true" />
             <span>{label}</span>
             <small>{format}</small>
@@ -916,6 +1002,9 @@ function AnalysisWorkbenchPage({
 }) {
   return (
     <>
+      <section className="demo-data-notice" aria-label="示例数据提示">
+        当前工作台展示的是示例分析数据；真实上传的数据集请在“数据管理”中查看。
+      </section>
       <section className="summary-grid" aria-label="分析概览">
         {summaryCards.map((card) => (
           <SummaryCard key={card.label} card={card} />
@@ -971,205 +1060,231 @@ function AnalysisWorkbenchPage({
   );
 }
 
-function CreateTaskPanel() {
-  const [taskName, setTaskName] = useState('Ionosphere OMELET-SV 任务');
-  const [mode, setMode] = useState<'OMELET' | 'OMELET-SV'>('OMELET-SV');
-  const [nBase, setNBaseInput] = useState('20');
-  const [sigma, setSigma] = useState('1');
-  const [lambda, setLambda] = useState('5');
-  const [gamma, setGamma] = useState('5');
-  const [anchor, setAnchor] = useState('10');
-  const [runs, setRuns] = useState('10');
-  const [maxIter, setMaxIter] = useState('10');
-  const [taskDraft, setTaskDraft] = useState<any | null>(null);
+function CAMatrixPage() {
+  const [threshold, setThreshold] = useState(70);
+  const [isRecalculating, setIsRecalculating] = useState(false);
+  const flaggedPairs = caPreview.reduce(
+    (count, row, rowIndex) =>
+      count + row.filter((value, colIndex) => colIndex > rowIndex && value * 100 >= threshold).length,
+    0,
+  );
 
-  function handleTaskCreate() {
-    const createdAt = new Intl.DateTimeFormat('zh-CN', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    }).format(new Date());
+  function recalculateMatrix() {
+    setIsRecalculating(true);
+    window.setTimeout(() => setIsRecalculating(false), 900);
+  }
 
-    setTaskDraft({
-      name: taskName.trim() || '未命名聚类任务',
-      mode,
-      nBase: Number(nBase),
-      selectedCount: Number(nBase),
-      createdAt,
-    });
+  function exportMatrix() {
+    const content = [
+      ['sample', ...caPreview.map((_row, index) => `S${index + 1}`)].join(','),
+      ...caPreview.map((row, index) => [`S${index + 1}`, ...row].join(',')),
+    ].join('\n');
+    downloadTextFile('ionosphere-ca-matrix.csv', content, 'text/csv;charset=utf-8');
   }
 
   return (
-    <section className="panel dataset-task-panel" aria-label="创建聚类任务">
-      <div className="panel-header">
-        <div>
-          <h2>创建聚类任务</h2>
-          <span>把数据集、算法模式和参数整理成任务草稿。</span>
-        </div>
-        <ClipboardList size={20} aria-hidden="true" />
-      </div>
-
-      <div className="task-form-grid">
-        <label className="task-form-wide">
-          <span>任务名称</span>
-          <input
-            aria-label="任务名称"
-            value={taskName}
-            onChange={(event) => setTaskName(event.target.value)}
-          />
-        </label>
-
-        <div className="task-mode-control" aria-label="算法模式">
-          {(['OMELET', 'OMELET-SV'] as const).map((item) => (
-            <button
-              key={item}
-              type="button"
-              className={mode === item ? 'active' : ''}
-              aria-pressed={mode === item}
-              onClick={() => setMode(item)}
-            >
-              {item}
+    <section className="workbench-page ca-analysis-page" aria-label="CA 协关联矩阵">
+      <WorkbenchPageHeader
+        icon={Boxes}
+        title="CA 协关联矩阵"
+        context="Ionosphere · 351 个样本 · 20 个基础聚类 · 更新于 10:32"
+        status={
+          <WorkbenchStatus tone={isRecalculating ? 'warning' : 'success'} pulse={isRecalculating}>
+            {isRecalculating ? '正在重算' : '矩阵就绪'}
+          </WorkbenchStatus>
+        }
+        actions={
+          <>
+            <button type="button" className="btn btn-secondary" onClick={exportMatrix}>
+              <Download size={15} aria-hidden="true" />
+              导出矩阵
             </button>
-          ))}
-        </div>
+            <button type="button" className="btn btn-primary" disabled={isRecalculating} onClick={recalculateMatrix}>
+              <RefreshCw size={15} aria-hidden="true" />
+              {isRecalculating ? '计算中' : '重新计算'}
+            </button>
+          </>
+        }
+      />
 
-        <label>
-          <span>n_base</span>
-          <input
-            type="number"
-            aria-label="n_base"
-            value={nBase}
-            onChange={(event) => setNBaseInput(event.target.value)}
-          />
-        </label>
-        <label>
-          <span>sigma</span>
-          <input value={sigma} onChange={(event) => setSigma(event.target.value)} />
-        </label>
-        <label>
-          <span>lambda</span>
-          <input value={lambda} onChange={(event) => setLambda(event.target.value)} />
-        </label>
-        <label>
-          <span>gamma</span>
-          <input value={gamma} onChange={(event) => setGamma(event.target.value)} />
-        </label>
-        <label>
-          <span>anchor</span>
-          <input value={anchor} onChange={(event) => setAnchor(event.target.value)} />
-        </label>
-        <label>
-          <span>runs</span>
-          <input value={runs} onChange={(event) => setRuns(event.target.value)} />
-        </label>
-        <label>
-          <span>max_iter</span>
-          <input value={maxIter} onChange={(event) => setMaxIter(event.target.value)} />
-        </label>
-      </div>
+      <WorkbenchMetricStrip
+        label="矩阵摘要"
+        metrics={[
+          { label: '矩阵规模', value: '351 × 351', note: '123,201 个单元', icon: LayoutGrid, tone: 'blue' },
+          { label: '参与构建', value: '20 / 100', note: '基础聚类子集', icon: Boxes, tone: 'teal' },
+          { label: '非对角均值', value: '0.34', note: '当前预览窗口', icon: Target, tone: 'neutral' },
+          { label: '高共聚样本对', value: `${flaggedPairs} 组`, note: `阈值 ≥ ${(threshold / 100).toFixed(2)}`, icon: Activity, tone: 'amber' },
+        ]}
+      />
 
-      <button
-        type="button"
-        className="btn btn-primary dataset-create-task"
-        onClick={handleTaskCreate}
-      >
-        <Play size={16} aria-hidden="true" />
-        创建任务
-      </button>
-
-      <article className="task-draft-card" aria-label="任务草稿预览">
-        <div>
-          <span>任务草稿</span>
-          <strong>{taskDraft?.name ?? '等待创建任务'}</strong>
-        </div>
-        <dl>
-          <div>
-            <dt>状态</dt>
-            <dd>等待 FastAPI 接入</dd>
-          </div>
-          <div>
-            <dt>算法</dt>
-            <dd>{taskDraft?.mode ?? mode}</dd>
-          </div>
-          <div>
-            <dt>基础聚类</dt>
-            <dd>{taskDraft ? `${taskDraft.selectedCount} 个基础聚类` : `等待选择`}</dd>
-          </div>
-          <div>
-            <dt>n_base</dt>
-            <dd>{taskDraft?.nBase ?? nBase}</dd>
-          </div>
-          <div>
-            <dt>创建时间</dt>
-            <dd>{taskDraft?.createdAt ?? '未创建'}</dd>
-          </div>
-        </dl>
-      </article>
-
-      <div className="dataset-task-note">
-        <FlaskConical size={16} aria-hidden="true" />
-        <span>后续接入 Python OMELET / OMELET-SV 服务后，这里会写入真实任务队列。</span>
-      </div>
-    </section>
-  );
-}
-
-function TaskCenterPage() {
-  return (
-    <>
-      <section className="task-board" aria-label="任务中心列表">
-        <CreateTaskPanel />
-        <PipelinePanel />
-        <TaskPanel />
-        <FeatureListPanel
-          title="任务列表"
-          description="当前示例任务状态，后续接入 analysis_tasks。"
-          items={[
-            { title: 'Ionosphere / OMELET-SV', detail: '第 6 / 10 轮，正在更新 Z / S / alpha。', status: '运行中' },
-            { title: 'Breast Cancer / OMELET', detail: '等待基础聚类结果导入。', status: '待配置' },
-            { title: 'Synthetic Benchmark', detail: '指标评估与导出已完成。', status: '完成' },
-          ]}
-        />
-      </section>
-    </>
-  );
-}
-
-function CAMatrixPage() {
-  return (
-    <>
-      <section className="focused-analysis-grid" aria-label="CA 协关联矩阵分析">
-        <CAMatrixPanel title="矩阵预览" />
+      <div className="ca-primary-grid">
+        <CAMatrixPanel title="样本共聚结构" />
         <FeatureListPanel
           title="构建流程"
-          description="由基础聚类标签矩阵 E 生成 CA 协关联矩阵。"
+          description="当前任务已完成 3 个阶段，热力图摘要正在同步。"
           items={[
             { title: '选择基础聚类子集', detail: '从 100 个基础聚类中选择 n_base = 20。', status: '完成' },
             { title: 'GBE 编码', detail: '把基础聚类标签转换为样本共现编码。', status: '完成' },
             { title: '计算共聚频率', detail: '按样本对归一化得到 CA 矩阵。', status: '完成' },
-            { title: '输出热力图预览', detail: '保留高共聚样本对和矩阵摘要。', status: '运行中' },
+            {
+              title: '同步矩阵摘要',
+              detail: isRecalculating ? '正在更新阈值分布与高共聚样本对。' : '热力图、分布统计和样本对已就绪。',
+              status: isRecalculating ? '运行中' : '完成',
+            },
           ]}
         />
+      </div>
+
+      <section className="panel ca-diagnostics-panel" aria-label="矩阵诊断">
+        <WorkbenchSectionHeader
+          title="矩阵诊断"
+          meta="阈值变化只影响诊断列表，不修改原始 CA 数值。"
+          actions={<WorkbenchStatus tone="info">结构清晰</WorkbenchStatus>}
+        />
+        <div className="ca-diagnostics-grid">
+          <div className="ca-threshold-control">
+            <div>
+              <label htmlFor="ca-threshold">高共聚阈值</label>
+              <strong>{(threshold / 100).toFixed(2)}</strong>
+            </div>
+            <input
+              id="ca-threshold"
+              type="range"
+              min="50"
+              max="90"
+              step="5"
+              value={threshold}
+              onChange={(event) => setThreshold(Number(event.target.value))}
+            />
+            <div className="ca-threshold-scale" aria-hidden="true">
+              <span>0.50</span>
+              <span>0.70</span>
+              <span>0.90</span>
+            </div>
+          </div>
+
+          <div className="ca-distribution" aria-label="矩阵值分布">
+            {([
+              ['0.00 - 0.25', 42, 'low'],
+              ['0.25 - 0.50', 28, 'mid'],
+              ['0.50 - 0.75', 19, 'high'],
+              ['0.75 - 1.00', 11, 'peak'],
+            ] as const).map(([label, value, tone]) => (
+              <div className="ca-distribution-row" key={label}>
+                <span>{label}</span>
+                <div><i className={tone} style={{ width: `${value}%` }} /></div>
+                <strong>{value}%</strong>
+              </div>
+            ))}
+          </div>
+
+          <div className="ca-diagnostic-summary">
+            <div>
+              <CheckCircle2 size={16} aria-hidden="true" />
+              <span><strong>对称性通过</strong><small>最大误差 2.1e-8</small></span>
+            </div>
+            <div>
+              <CheckCircle2 size={16} aria-hidden="true" />
+              <span><strong>对角线通过</strong><small>351 / 351 均为 1.00</small></span>
+            </div>
+            <div>
+              <Info size={16} aria-hidden="true" />
+              <span><strong>{flaggedPairs} 组重点样本对</strong><small>可进入结果分析继续核对</small></span>
+            </div>
+          </div>
+        </div>
       </section>
-    </>
+    </section>
   );
 }
 
 function MultiKernelPage({
   weightsOption,
   topologyOption,
+  convergenceOption,
 }: {
   weightsOption: EChartsOption;
   topologyOption: EChartsOption;
+  convergenceOption: EChartsOption;
 }) {
+  const [isRunning, setIsRunning] = useState(true);
+
   return (
-    <>
-      <section className="focused-analysis-grid" aria-label="多核相似性学习分析">
+    <section className="workbench-page mkl-analysis-page" aria-label="多核相似性学习">
+      <WorkbenchPageHeader
+        icon={Network}
+        title="多核相似性学习"
+        context="任务 #OMELET-072 · Ionosphere · OMELET-SV · 第 6 / 10 轮"
+        status={
+          <WorkbenchStatus tone={isRunning ? 'warning' : 'neutral'} pulse={isRunning}>
+            {isRunning ? '联合优化中' : '已暂停'}
+          </WorkbenchStatus>
+        }
+        actions={
+          <>
+            <button type="button" className="btn btn-secondary" onClick={() => setIsRunning((value) => !value)}>
+              {isRunning ? <Pause size={15} aria-hidden="true" /> : <Play size={15} aria-hidden="true" />}
+              {isRunning ? '暂停任务' : '继续任务'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => downloadTextFile('omelet-sv-parameters.json', JSON.stringify(Object.fromEntries(taskParams), null, 2), 'application/json')}
+            >
+              <Save size={15} aria-hidden="true" />
+              保存参数
+            </button>
+          </>
+        }
+      />
+
+      <WorkbenchMetricStrip
+        label="学习状态摘要"
+        metrics={[
+          { label: '参与学习的核', value: '4 组', note: '2 RBF · Linear · Poly', icon: Boxes, tone: 'blue' },
+          { label: '当前迭代', value: '6 / 10', note: isRunning ? '正在更新 Z / S / alpha' : '任务已暂停', icon: RefreshCw, tone: 'amber' },
+          { label: '目标函数', value: '113.9', note: '较初始值下降 53.6%', icon: TrendingDown, tone: 'green' },
+          { label: '主导核权重', value: '0.31', note: 'RBF 核 · sigma = 1', icon: Target, tone: 'teal' },
+        ]}
+      />
+
+      <div className="mkl-primary-grid">
         <SelectableChartPanel weightsOption={weightsOption} topologyOption={topologyOption} />
         <TaskPanel />
+      </div>
+
+      <div className="mkl-secondary-grid">
         <PipelinePanel />
+        <ChartPanel
+          className="mkl-convergence-panel"
+          title="优化收敛"
+          description="目标函数在第 6 轮后进入稳定区间"
+          label="多核学习收敛曲线"
+          option={convergenceOption}
+        />
+      </div>
+
+      <section className="panel mkl-diagnostics-panel" aria-label="核权重诊断">
+        <WorkbenchSectionHeader
+          title="核权重诊断"
+          meta="alpha 权重和为 1.00，当前没有异常塌缩。"
+          actions={<WorkbenchStatus tone="success">约束通过</WorkbenchStatus>}
+        />
+        <div className="mkl-kernel-rows">
+          {[
+            ['K1 · RBF σ=1', 31, '对局部结构最敏感', 'blue'],
+            ['K2 · Linear', 22, '保留全局线性关系', 'teal'],
+            ['K3 · RBF σ=2', 29, '补充平滑邻域结构', 'green'],
+            ['K4 · Polynomial d=3', 18, '提供非线性交互项', 'amber'],
+          ].map(([label, value, note, tone]) => (
+            <div className="mkl-kernel-row" key={label}>
+              <div><strong>{label}</strong><span>{note}</span></div>
+              <WorkbenchProgress value={Number(value)} label={`权重 ${Number(value) / 100}`} tone={tone as 'blue' | 'teal' | 'green' | 'amber'} animated={isRunning} />
+            </div>
+          ))}
+        </div>
       </section>
-    </>
+    </section>
   );
 }
 
@@ -1184,73 +1299,299 @@ function ResultsAnalysisPage({
   weightsOption: EChartsOption;
   topologyOption: EChartsOption;
 }) {
+  const navigate = useNavigate();
+
   return (
-    <>
-      <section className="result-analysis-layout" aria-label="结果分析内容">
-        <FeatureListPanel
-          title="指标评估"
-          description="ACC、NMI、ARI、F1 与多次运行统计。"
-          items={metrics.map((metric) => ({
-            title: `${metric.label}：${metric.value}`,
-            detail: metric.note,
-            status: '完成',
-          }))}
+    <section className="workbench-page results-analysis-page" aria-label="结果分析">
+      <WorkbenchPageHeader
+        icon={BarChart3}
+        title="结果分析"
+        context="任务 #OMELET-072 · Ionosphere · 10 次重复实验 · 完成于 10:31"
+        status={<WorkbenchStatus tone="success">结果已验证</WorkbenchStatus>}
+        actions={
+          <>
+            <button type="button" className="btn btn-secondary" onClick={() => navigate('/workbench/reports')}>
+              <FileText size={15} aria-hidden="true" />
+              生成报告
+            </button>
+            <button type="button" className="btn btn-primary" onClick={() => navigate('/workbench/export')}>
+              <Download size={15} aria-hidden="true" />
+              导出结果
+            </button>
+          </>
+        }
+      />
+
+      <WorkbenchMetricStrip
+        label="核心性能指标"
+        metrics={metrics.slice(0, 4).map((metric, index) => ({
+          label: metric.label,
+          value: metric.value,
+          note: index === 0 ? '较基线提升 3.8%' : metric.note,
+          icon: [Target, Network, Boxes, CheckCircle2][index],
+          tone: (['green', 'blue', 'teal', 'neutral'] as const)[index],
+        }))}
+      />
+
+      <div className="result-primary-grid">
+        <ChartPanel
+          className="result-featured-chart"
+          title="聚类分布"
+          description="降维空间中的最终标签分布，当前分为 2 个稳定簇"
+          label="结果聚类散点图"
+          option={scatterOption}
         />
-        <section className="secondary-card-grid" aria-label="图表展示">
-          <SelectableChartPanel weightsOption={weightsOption} topologyOption={topologyOption} />
-          <ChartPanel
-            title="收敛曲线"
-            description="目标函数随迭代轮次下降"
-            label="收敛曲线"
-            option={convergenceOption}
-          />
-          <ChartPanel
-            title="聚类散点图"
-            description="降维后的最终标签分布"
-            label="聚类散点图"
-            option={scatterOption}
+
+        <section className="panel result-quality-panel" aria-label="结果质量摘要">
+          <WorkbenchSectionHeader title="结果质量" meta="10 次运行波动保持在 2.1% 以内。" />
+          <div className="result-quality-score">
+            <div>
+              <span>综合可信度</span>
+              <strong>89.7</strong>
+              <small>/ 100</small>
+            </div>
+            <WorkbenchStatus tone="success">稳定</WorkbenchStatus>
+          </div>
+          <div className="result-quality-bars">
+            <WorkbenchProgress value={91} label="标签一致性" tone="green" />
+            <WorkbenchProgress value={86} label="信息一致性" tone="blue" />
+            <WorkbenchProgress value={83} label="随机修正指数" tone="teal" />
+            <WorkbenchProgress value={88} label="类别均衡度" tone="amber" />
+          </div>
+          <WorkbenchNotice
+            tone="success"
+            icon={CheckCircle2}
+            title="质量门槛已通过"
+            detail="指标、标签数量和收敛状态均满足导出条件。"
           />
         </section>
+      </div>
+
+      <div className="result-support-grid">
+        <SelectableChartPanel weightsOption={weightsOption} topologyOption={topologyOption} />
+        <ChartPanel
+          title="收敛曲线"
+          description="第 6 轮后目标函数变化小于 1%"
+          label="结果收敛曲线"
+          option={convergenceOption}
+        />
+      </div>
+
+      <section className="panel result-runs-panel" aria-label="重复实验摘要">
+        <WorkbenchSectionHeader title="重复实验摘要" meta="最近 4 次运行 · 按 ACC 从高到低查看" />
+        <div className="result-runs-table" role="table" aria-label="重复实验结果">
+          <div className="result-runs-row header" role="row">
+            <span role="columnheader">运行</span><span role="columnheader">ACC</span><span role="columnheader">NMI</span><span role="columnheader">ARI</span><span role="columnheader">F1</span><span role="columnheader">耗时</span><span role="columnheader">状态</span>
+          </div>
+          {[
+            ['#03', '92.1%', '87.1%', '83.9%', '89.0%', '17.9s'],
+            ['#01', '91.8%', '86.7%', '83.1%', '88.5%', '18.2s'],
+            ['#04', '90.9%', '86.2%', '82.4%', '87.8%', '18.5s'],
+            ['#02', '90.4%', '85.9%', '81.6%', '87.2%', '18.7s'],
+          ].map((row) => (
+            <div className="result-runs-row" role="row" key={row[0]}>
+              {row.map((cell) => <span role="cell" key={cell}>{cell}</span>)}
+              <span role="cell"><WorkbenchStatus tone="success">通过</WorkbenchStatus></span>
+            </div>
+          ))}
+        </div>
       </section>
-    </>
+    </section>
   );
 }
 
 function ExportCenterPage() {
+  const exportItems = [
+    { key: 'labels', label: '聚类标签', note: '351 个样本 · CSV', size: '18 KB', icon: FileSpreadsheet },
+    { key: 'metrics', label: '性能指标', note: 'ACC / NMI / ARI / F1', size: '12 KB', icon: BarChart3 },
+    { key: 'charts', label: '图像结果', note: '5 张 PNG · 1600 × 900', size: '6.8 MB', icon: LayoutGrid },
+    { key: 'config', label: '任务参数', note: '核配置与迭代参数 · JSON', size: '4 KB', icon: FileJson },
+    { key: 'report', label: '分析摘要', note: '实验信息与主要结论 · TXT', size: '26 KB', icon: FileText },
+  ] as const;
+  const [selectedItems, setSelectedItems] = useState<string[]>(exportItems.map((item) => item.key));
+  const [format, setFormat] = useState<'zip' | 'json' | 'csv'>('zip');
+  const [filename, setFilename] = useState('Ionosphere_OMELET-SV_20260716');
+  const [exportState, setExportState] = useState<'idle' | 'preparing' | 'done'>('idle');
+
+  function toggleExportItem(key: string) {
+    setSelectedItems((current) =>
+      current.includes(key) ? current.filter((item) => item !== key) : [...current, key],
+    );
+    setExportState('idle');
+  }
+
+  function createExport() {
+    if (selectedItems.length === 0 || exportState === 'preparing') return;
+    setExportState('preparing');
+    window.setTimeout(() => {
+      const payload = {
+        dataset: 'Ionosphere',
+        mode: 'OMELET-SV',
+        generatedAt: new Date().toISOString(),
+        files: selectedItems,
+        metrics: { ACC: '91.2%', NMI: '86.4%', ARI: '82.7%', F1: '88.0%' },
+      };
+      downloadTextFile(`${filename}.${format === 'zip' ? 'json' : format}`, JSON.stringify(payload, null, 2), 'application/json');
+      setExportState('done');
+    }, 850);
+  }
+
   return (
-    <>
-      <section className="focused-analysis-grid" aria-label="结果导出中心">
-        <ExportPanel />
-        <FeatureListPanel
-          title="导出内容"
-          description="面向任务结果的文件化交付。"
-          items={[
-            { title: '导出聚类标签', detail: '保存每个样本对应的最终聚类标签。', status: '完成' },
-            { title: '导出指标表格', detail: '输出 ACC、NMI、ARI、F1 与运行统计。', status: '完成' },
-            { title: '导出图像结果', detail: '保存矩阵、散点图和收敛曲线。', status: '待配置' },
-            { title: '生成聚类分析报告', detail: '汇总数据、参数、指标和图表。', status: '待配置' },
-          ]}
-        />
+    <section className="workbench-page export-center-page" aria-label="结果导出">
+      <WorkbenchPageHeader
+        icon={Archive}
+        title="结果导出"
+        context="任务 #OMELET-072 · Ionosphere · 所有质量检查已通过"
+        status={<WorkbenchStatus tone="success">可导出</WorkbenchStatus>}
+        actions={
+          <button type="button" className="btn btn-primary" disabled={selectedItems.length === 0 || exportState === 'preparing'} onClick={createExport}>
+            <FileArchive size={15} aria-hidden="true" />
+            {exportState === 'preparing' ? '正在打包' : '生成导出包'}
+          </button>
+        }
+      />
+
+      <WorkbenchMetricStrip
+        label="导出摘要"
+        metrics={[
+          { label: '可用内容', value: '5 项', note: '标签、指标、图像、参数、摘要', icon: Archive, tone: 'blue' },
+          { label: '当前选择', value: `${selectedItems.length} 项`, note: '可随时调整', icon: CheckCircle2, tone: 'teal' },
+          { label: '预计大小', value: selectedItems.includes('charts') ? '6.9 MB' : '60 KB', note: '按当前选择估算', icon: FileArchive, tone: 'neutral' },
+          { label: '最近导出', value: '10:12', note: 'Ionosphere_results.zip', icon: Clock3, tone: 'green' },
+        ]}
+      />
+
+      <div className="export-builder-grid">
+        <section className="panel export-selection-panel" aria-label="选择导出内容">
+          <WorkbenchSectionHeader
+            title="导出内容"
+            meta={`${selectedItems.length} / ${exportItems.length} 项已选择`}
+            actions={
+              <button
+                type="button"
+                className="text-action"
+                onClick={() => setSelectedItems(selectedItems.length === exportItems.length ? [] : exportItems.map((item) => item.key))}
+              >
+                {selectedItems.length === exportItems.length ? '清除选择' : '全部选择'}
+              </button>
+            }
+          />
+          <div className="export-item-list">
+            {exportItems.map((item) => {
+              const Icon = item.icon;
+              const selected = selectedItems.includes(item.key);
+              return (
+                <label className={`export-item-row${selected ? ' selected' : ''}`} key={item.key}>
+                  <input type="checkbox" checked={selected} onChange={() => toggleExportItem(item.key)} />
+                  <span className="export-item-icon" aria-hidden="true"><Icon size={17} /></span>
+                  <span className="export-item-copy"><strong>{item.label}</strong><small>{item.note}</small></span>
+                  <span className="export-item-size">{item.size}</span>
+                </label>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="panel export-settings-panel" aria-label="导出设置">
+          <WorkbenchSectionHeader title="导出设置" meta="文件名与交付格式" />
+          <label className="export-field">
+            <span>文件名</span>
+            <input value={filename} onChange={(event) => setFilename(event.target.value)} />
+          </label>
+          <fieldset className="export-format-field">
+            <legend>交付格式</legend>
+            <div className="export-format-options">
+              {[
+                ['zip', '完整包', FileArchive],
+                ['json', 'JSON', FileJson],
+                ['csv', 'CSV 清单', FileSpreadsheet],
+              ].map(([value, label, Icon]) => (
+                <button
+                  type="button"
+                  className={format === value ? 'active' : ''}
+                  aria-pressed={format === value}
+                  key={value as string}
+                  onClick={() => setFormat(value as 'zip' | 'json' | 'csv')}
+                >
+                  <Icon size={16} aria-hidden="true" />
+                  <span>{label as string}</span>
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          <div className="export-manifest">
+            <div><span>数据集</span><strong>Ionosphere</strong></div>
+            <div><span>任务模式</span><strong>OMELET-SV</strong></div>
+            <div><span>指标精度</span><strong>保留 4 位</strong></div>
+            <div><span>图像规格</span><strong>PNG · 1600 × 900</strong></div>
+          </div>
+          {exportState === 'preparing' ? <WorkbenchProgress value={72} label="正在整理文件" animated /> : null}
+          {exportState === 'done' ? (
+            <WorkbenchNotice tone="success" icon={CheckCircle2} title="导出包已生成" detail="文件已保存到浏览器下载目录。" />
+          ) : null}
+          <button type="button" className="btn btn-primary export-submit" disabled={selectedItems.length === 0 || exportState === 'preparing'} onClick={createExport}>
+            <Download size={15} aria-hidden="true" />
+            {exportState === 'preparing' ? '正在生成…' : `生成 ${format.toUpperCase()}`}
+          </button>
+        </section>
+      </div>
+
+      <section className="panel recent-exports-panel" aria-label="最近导出">
+        <WorkbenchSectionHeader title="最近导出" meta="当前任务的最近 3 条交付记录" />
+        <div className="recent-export-table" role="table" aria-label="最近导出记录">
+          {[
+            ['Ionosphere_results_1012.zip', '完整包 · 5 项', '6.9 MB', '今天 10:12'],
+            ['Ionosphere_metrics_0948.csv', '指标清单 · 1 项', '12 KB', '今天 09:48'],
+            ['Ionosphere_review_0715.json', '复核数据 · 3 项', '42 KB', '昨天 18:26'],
+          ].map((row) => (
+            <div className="recent-export-row" role="row" key={row[0]}>
+              <FileArchive size={16} aria-hidden="true" />
+              <strong role="cell">{row[0]}</strong>
+              <span role="cell">{row[1]}</span>
+              <span role="cell">{row[2]}</span>
+              <time role="cell">{row[3]}</time>
+              <button type="button" className="icon-action" title="重新生成" aria-label={`重新生成 ${row[0]}`} onClick={createExport}>
+                <RefreshCw size={14} aria-hidden="true" />
+              </button>
+            </div>
+          ))}
+        </div>
       </section>
-    </>
+    </section>
   );
 }
 
 function WorkbenchPageContent({
   activeSection,
+  sectionKey,
+  resultResource,
   weightsOption,
   topologyOption,
   convergenceOption,
   scatterOption,
 }: {
   activeSection: string;
+  sectionKey: string;
+  resultResource: ReturnType<typeof useTaskResult>;
   weightsOption: EChartsOption;
   topologyOption: EChartsOption;
   convergenceOption: EChartsOption;
   scatterOption: EChartsOption;
 }) {
+  if (['analysis', 'ca-matrix', 'kernel-config', 'mkl', 'evaluation', 'visualization', 'results', 'export', 'reports', 'logs'].includes(sectionKey)) {
+    return <TaskResultViews section={sectionKey} resource={resultResource} />;
+  }
+
   if (activeSection === '数据管理') {
     return <DatasetManagementPage />;
+  }
+
+  if (activeSection === '数据质量检查') {
+    return <DataQualityPage />;
+  }
+
+  if (activeSection === '数据版本记录') {
+    return <DatasetVersionsPage />;
   }
 
   if (activeSection === '任务中心') {
@@ -1261,8 +1602,33 @@ function WorkbenchPageContent({
     return <CAMatrixPage />;
   }
 
+  if (activeSection === '核函数配置') {
+    return <KernelConfigPage />;
+  }
+
   if (activeSection === '多核相似性学习') {
-    return <MultiKernelPage weightsOption={weightsOption} topologyOption={topologyOption} />;
+    return (
+      <MultiKernelPage
+        weightsOption={weightsOption}
+        topologyOption={topologyOption}
+        convergenceOption={convergenceOption}
+      />
+    );
+  }
+
+  if (activeSection === '性能评估') {
+    return <PerformanceEvaluationPage metrics={metrics} />;
+  }
+
+  if (activeSection === '可视化展示') {
+    return (
+      <VisualizationShowcasePage
+        weightsOption={weightsOption}
+        topologyOption={topologyOption}
+        convergenceOption={convergenceOption}
+        scatterOption={scatterOption}
+      />
+    );
   }
 
   if (activeSection === '结果分析') {
@@ -1280,6 +1646,14 @@ function WorkbenchPageContent({
     return <ExportCenterPage />;
   }
 
+  if (activeSection === '分析报告') {
+    return <ReportCenterPage />;
+  }
+
+  if (activeSection === '运行日志') {
+    return <OperationLogsPage />;
+  }
+
   return (
     <AnalysisWorkbenchPage
       weightsOption={weightsOption}
@@ -1294,23 +1668,80 @@ function App() {
   const navigate = useNavigate();
   const location = useLocation();
   const workbenchSection = getActiveWorkbenchSection(location.pathname);
+  const workbenchKey = location.pathname.split('/')[2] || 'analysis';
+  const resultResource = useTaskResult(Boolean(workbenchSection));
   const activeSection = workbenchSection ?? '分析工作台';
   const showStatusHeader = location.pathname === defaultWorkbenchPath;
   const initialPathRef = useRef(location.pathname);
   const sessionCheckedRef = useRef(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [, setCurrentUser] = useState<AuthUser | null>(null);
+  const [workbenchEntryPending, setWorkbenchEntryPending] = useState(false);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+    if (typeof localStorage === 'undefined') return null;
+    const storedUser = localStorage.getItem('soft_web_user');
+    if (!storedUser) return null;
+    try {
+      return JSON.parse(storedUser) as AuthUser;
+    } catch {
+      return null;
+    }
+  });
+  const [backendStatus, setBackendStatus] = useState<BackendStatus>('checking');
 
   const topologyOption = useMemo(() => buildHeatmapOption(), []);
   const weightsOption = useMemo(() => buildKernelWeightsOption(), []);
   const convergenceOption = useMemo(() => buildConvergenceOption(), []);
   const scatterOption = useMemo(() => buildClusterScatterOption(), []);
 
-  const enterWorkbench = useCallback(() => {
+  const openWorkbench = useCallback(() => {
     navigate(defaultWorkbenchPath);
     setSidebarOpen(false);
   }, [navigate]);
+
+  const enterWorkbench = useCallback(async () => {
+    if (workbenchEntryPending) return;
+
+    setWorkbenchEntryPending(true);
+    const accessToken = getStoredAccessToken();
+
+    try {
+      if (!accessToken) {
+        clearAuthSession();
+        setCurrentUser(null);
+        navigate('/login');
+        return;
+      }
+
+      const user = await getCurrentUser(accessToken);
+      setCurrentUser(user);
+      openWorkbench();
+    } catch {
+      clearAuthSession();
+      setCurrentUser(null);
+      setSidebarOpen(false);
+      navigate('/login');
+    } finally {
+      setWorkbenchEntryPending(false);
+    }
+  }, [navigate, openWorkbench, workbenchEntryPending]);
+
+  const refreshBackendStatus = useCallback(async () => {
+    setBackendStatus('checking');
+    if (typeof fetch === 'undefined') {
+      setBackendStatus('offline');
+      return;
+    }
+    try {
+      const response = await fetch(`${API}/health`);
+      if (!response.ok) {
+        throw new Error('health check failed');
+      }
+      setBackendStatus('online');
+    } catch {
+      setBackendStatus('offline');
+    }
+  }, []);
 
   useEffect(() => {
     if (sessionCheckedRef.current) {
@@ -1345,6 +1776,11 @@ function App() {
     };
   }, [navigate]);
 
+  useEffect(() => {
+    if (!workbenchSection) return;
+    void refreshBackendStatus();
+  }, [refreshBackendStatus, workbenchSection]);
+
   const handleAuthSuccess = () => {
     const storedUser = localStorage.getItem('soft_web_user');
     if (storedUser) {
@@ -1354,7 +1790,7 @@ function App() {
         setCurrentUser(null);
       }
     }
-    enterWorkbench();
+    openWorkbench();
   };
 
   const handleLogout = async () => {
@@ -1380,6 +1816,9 @@ function App() {
 
       <TopHeader
         activeSection={activeSection}
+        analysisContext={resultResource.envelope?.task ? `${resultResource.envelope.task.datasetName} · ${resultResource.envelope.task.mode}` : '尚未选择分析任务'}
+        backendStatus={backendStatus}
+        currentUser={currentUser}
         onToggleMobileNav={() => setSidebarOpen((value) => !value)}
         onLogout={handleLogout}
       />
@@ -1394,10 +1833,18 @@ function App() {
         {sidebarCollapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
       </button>
 
-      <main className="dashboard-content" id="main-content">
-        {showStatusHeader ? <StatusHeader /> : null}
+      <main className={`dashboard-content${workbenchKey === 'logs' ? ' is-log-layout' : ''}`} id="main-content">
+        {showStatusHeader ? (
+          <StatusHeader
+            status={backendStatus}
+            onImportData={() => navigate('/workbench/datasets')}
+            onCreateTask={() => navigate('/workbench/tasks')}
+          />
+        ) : null}
         <WorkbenchPageContent
           activeSection={activeSection}
+          sectionKey={workbenchKey}
+          resultResource={resultResource}
           weightsOption={weightsOption}
           topologyOption={topologyOption}
           convergenceOption={convergenceOption}
@@ -1421,6 +1868,7 @@ function App() {
               onLogin={() => navigate('/login')}
               onRegister={() => navigate('/register')}
               onEnterWorkbench={enterWorkbench}
+              isEnteringWorkbench={workbenchEntryPending}
             />
           }
         />

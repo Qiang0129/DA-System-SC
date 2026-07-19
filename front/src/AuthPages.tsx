@@ -1,6 +1,9 @@
-import { useState } from 'react';
-import { ArrowLeft, LogIn, UserPlus } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { ArrowLeft, LoaderCircle, LogIn, UserPlus } from 'lucide-react';
 import { login, register, saveAuthSession } from './api/auth';
+
+const AUTH_SUBMIT_FEEDBACK_MS = 260;
 
 interface AuthProps {
   onSuccess: () => void;
@@ -8,8 +11,22 @@ interface AuthProps {
   onBack: () => void;
 }
 
+function waitForAuthSubmitFeedback(startedAt: number) {
+  const remaining = AUTH_SUBMIT_FEEDBACK_MS - (Date.now() - startedAt);
+
+  if (remaining <= 0) {
+    return Promise.resolve();
+  }
+
+  // 极快响应也保留短暂加载态，避免用户误以为点击没有生效。
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, remaining);
+  });
+}
+
 function AuthField({
   id,
+  name,
   label,
   type,
   value,
@@ -17,6 +34,7 @@ function AuthField({
   autoComplete,
 }: {
   id: string;
+  name: string;
   label: string;
   type: string;
   value: string;
@@ -28,11 +46,13 @@ function AuthField({
       <label htmlFor={id}>{label}</label>
       <input
         id={id}
+        name={name}
         className="auth-input"
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         autoComplete={autoComplete}
+        spellCheck={type === 'text' ? false : undefined}
         required
       />
     </div>
@@ -46,11 +66,13 @@ function LoginCard({ onSuccess, onSwitch, onBack }: AuthProps) {
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async () => {
+    const startedAt = Date.now();
     setError('');
     setSubmitting(true);
     try {
       const auth = await login(username.trim(), password);
       saveAuthSession(auth);
+      await waitForAuthSubmitFeedback(startedAt);
       onSuccess();
     } catch (err) {
       setError(err instanceof Error ? err.message : '登录失败');
@@ -72,6 +94,7 @@ function LoginCard({ onSuccess, onSwitch, onBack }: AuthProps) {
       >
         <AuthField
           id="login-username"
+          name="username"
           label="用户名"
           type="text"
           value={username}
@@ -80,6 +103,7 @@ function LoginCard({ onSuccess, onSwitch, onBack }: AuthProps) {
         />
         <AuthField
           id="login-password"
+          name="password"
           label="密码"
           type="password"
           value={password}
@@ -87,9 +111,18 @@ function LoginCard({ onSuccess, onSwitch, onBack }: AuthProps) {
           autoComplete="current-password"
         />
         {error ? <p className="auth-error" role="alert">{error}</p> : null}
-        <button type="submit" className="btn btn-primary auth-submit" disabled={submitting}>
-          <LogIn size={16} aria-hidden="true" />
-          {submitting ? '登录中' : '登录'}
+        <button
+          type="submit"
+          className={`btn btn-primary auth-submit ${submitting ? 'is-loading' : ''}`}
+          disabled={submitting}
+          aria-busy={submitting}
+        >
+          {submitting ? (
+            <LoaderCircle className="auth-submit-spinner" size={16} aria-hidden="true" />
+          ) : (
+            <LogIn size={16} aria-hidden="true" />
+          )}
+          {submitting ? '登录中…' : '登录'}
         </button>
       </form>
       <p className="auth-switch">
@@ -111,6 +144,7 @@ function RegisterCard({ onSuccess, onSwitch, onBack }: AuthProps) {
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async () => {
+    const startedAt = Date.now();
     setError('');
 
     if (password !== confirm) {
@@ -122,6 +156,7 @@ function RegisterCard({ onSuccess, onSwitch, onBack }: AuthProps) {
     try {
       const auth = await register(username.trim(), password, confirm);
       saveAuthSession(auth);
+      await waitForAuthSubmitFeedback(startedAt);
       onSuccess();
     } catch (err) {
       setError(err instanceof Error ? err.message : '注册失败');
@@ -143,6 +178,7 @@ function RegisterCard({ onSuccess, onSwitch, onBack }: AuthProps) {
       >
         <AuthField
           id="register-username"
+          name="username"
           label="用户名"
           type="text"
           value={username}
@@ -151,6 +187,7 @@ function RegisterCard({ onSuccess, onSwitch, onBack }: AuthProps) {
         />
         <AuthField
           id="register-password"
+          name="password"
           label="密码"
           type="password"
           value={password}
@@ -159,6 +196,7 @@ function RegisterCard({ onSuccess, onSwitch, onBack }: AuthProps) {
         />
         <AuthField
           id="register-confirm"
+          name="confirmPassword"
           label="确认密码"
           type="password"
           value={confirm}
@@ -166,9 +204,18 @@ function RegisterCard({ onSuccess, onSwitch, onBack }: AuthProps) {
           autoComplete="new-password"
         />
         {error ? <p className="auth-error" role="alert">{error}</p> : null}
-        <button type="submit" className="btn btn-primary auth-submit" disabled={submitting}>
-          <UserPlus size={16} aria-hidden="true" />
-          {submitting ? '注册中' : '注册'}
+        <button
+          type="submit"
+          className={`btn btn-primary auth-submit ${submitting ? 'is-loading' : ''}`}
+          disabled={submitting}
+          aria-busy={submitting}
+        >
+          {submitting ? (
+            <LoaderCircle className="auth-submit-spinner" size={16} aria-hidden="true" />
+          ) : (
+            <UserPlus size={16} aria-hidden="true" />
+          )}
+          {submitting ? '注册中…' : '注册'}
         </button>
       </form>
       <p className="auth-switch">
@@ -208,6 +255,38 @@ interface AuthFlipCardProps {
   onBack: () => void;
 }
 
+function AuthFlipFace({
+  active,
+  className,
+  children,
+}: {
+  active: boolean;
+  className: string;
+  children: ReactNode;
+}) {
+  const faceRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const face = faceRef.current;
+
+    if (!face) {
+      return;
+    }
+
+    if (active) {
+      face.removeAttribute('inert');
+    } else {
+      face.setAttribute('inert', '');
+    }
+  }, [active]);
+
+  return (
+    <div ref={faceRef} className={className} aria-hidden={!active}>
+      {children}
+    </div>
+  );
+}
+
 export function AuthFlipCard({
   mode,
   onSuccess,
@@ -222,12 +301,12 @@ export function AuthFlipCard({
       <div className="blur-ball blur-ball-amber" aria-hidden="true" />
       <div className={`auth-flip${flipped ? ' is-flipped' : ''}`}>
         <div className="auth-flip-inner">
-          <div className="auth-flip-face auth-flip-front" aria-hidden={flipped}>
+          <AuthFlipFace active={!flipped} className="auth-flip-face auth-flip-front">
             <LoginCard onSuccess={onSuccess} onSwitch={onShowRegister} onBack={onBack} />
-          </div>
-          <div className="auth-flip-face auth-flip-back" aria-hidden={!flipped}>
+          </AuthFlipFace>
+          <AuthFlipFace active={flipped} className="auth-flip-face auth-flip-back">
             <RegisterCard onSuccess={onSuccess} onSwitch={onShowLogin} onBack={onBack} />
-          </div>
+          </AuthFlipFace>
         </div>
       </div>
     </div>

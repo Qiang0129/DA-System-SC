@@ -25,6 +25,16 @@ class Settings(BaseSettings):
     jwt_algorithm: str = Field("HS256", validation_alias="JWT_ALGORITHM")
     access_token_expire_minutes: int = Field(30, validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES")
     refresh_token_expire_days: int = Field(7, validation_alias="REFRESH_TOKEN_EXPIRE_DAYS")
+    dataset_storage_dir: Path = Field(
+        BASE_DIR / "storage" / "datasets",
+        validation_alias="DATASET_STORAGE_DIR",
+    )
+    result_storage_dir: Path = Field(
+        BASE_DIR / "storage" / "results",
+        validation_alias="RESULT_STORAGE_DIR",
+    )
+    task_executor_enabled: bool = Field(True, validation_alias="TASK_EXECUTOR_ENABLED")
+    task_poll_interval_seconds: float = Field(1.0, validation_alias="TASK_POLL_INTERVAL_SECONDS")
 
     cors_origins: str = Field(
         "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174",

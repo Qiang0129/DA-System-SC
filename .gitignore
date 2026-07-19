@@ -1,6 +1,7 @@
 front/node_modules/
 front/dist/
 front/*.tsbuildinfo
+front/*.log
 front/vite.config.js
 front/vite.config.d.ts
 front/.playwright-cli/
@@ -11,12 +12,14 @@ backend/__pycache__/
 backend/app/__pycache__/
 backend/tests/__pycache__/
 backend/*.log
+backend/storage/
 
 __pycache__/
 *.pyc
 
 output/
 tmp/
+/storage/
 
 .playwright-cli/
 .codex/

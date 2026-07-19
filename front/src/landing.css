@@ -23,7 +23,6 @@
   border-bottom: 0;
 }
 
-.landing-page.theme-dark .landing-brand-copy small,
 .landing-page.theme-dark .hero-subtitle,
 .landing-page.theme-dark .landing-section-header p,
 .landing-page.theme-dark .capability-card p,
@@ -116,30 +115,19 @@
   font-weight: 600;
 }
 
-.landing-brand-copy small {
-  display: block;
-  /* 对齐 new-api：text-xs (12px) */
-  font-size: 12px;
-  color: var(--app-text-muted);
-}
-
 .landing-version-pill {
   justify-self: end;
   min-width: 72px;
   height: 28px;
   padding: 0 14px;
-  border: 1px solid rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(64, 158, 255, 0.24);
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.42);
-  backdrop-filter: blur(14px) saturate(150%);
-  -webkit-backdrop-filter: blur(14px) saturate(150%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.6),
-    0 8px 24px rgba(15, 23, 42, 0.08);
-  color: var(--app-text-regular);
+  background: rgba(64, 158, 255, 0.12);
+  box-shadow: 0 3px 8px -6px rgba(51, 126, 204, 0.45);
+  color: #245f9f;
   font-size: 13px;
   font-weight: 600;
   line-height: 1;
@@ -147,12 +135,10 @@
 }
 
 .landing-page.theme-dark .landing-version-pill {
-  border-color: rgba(226, 232, 240, 0.18);
-  background: rgba(15, 23, 42, 0.38);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    0 8px 24px rgba(0, 0, 0, 0.18);
-  color: #e2e8f0;
+  border-color: rgba(121, 187, 255, 0.36);
+  background: rgba(64, 158, 255, 0.2);
+  box-shadow: 0 3px 8px -6px rgba(0, 0, 0, 0.42);
+  color: #eaf4ff;
 }
 
 .landing-hero {
@@ -310,8 +296,16 @@
   }
 }
 
+@keyframes auth-submit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .base-url-row {
   margin-top: 24px;
+  position: relative;
+  z-index: 1;
   max-width: 448px;
   width: 100%;
   min-height: 40px;
@@ -331,8 +325,8 @@
 
 .base-url-address {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: clip;
   white-space: nowrap;
   color: var(--app-text-primary);
   font-size: 15px;
@@ -341,8 +335,8 @@
 
 .base-url-endpoint {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: clip;
   white-space: nowrap;
   color: #0064fa;
   font-size: 14px;
@@ -390,7 +384,8 @@
 }
 
 .base-url-copy:focus-visible {
-  outline: none;
+  outline: 2px solid rgba(64, 158, 255, 0.32);
+  outline-offset: 2px;
   box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
 }
 
@@ -478,12 +473,12 @@
   color: var(--app-text-primary);
 }
 
-.capability-mark svg {
+.capability-mark-icon {
   width: 52px;
   height: 52px;
   flex: 0 0 52px;
-  opacity: 0.95;
-  stroke-width: 1.8;
+  display: block;
+  object-fit: contain;
 }
 
 .capability-mark strong {
@@ -688,6 +683,65 @@
   cursor: pointer;
   font-size: 14px;
   font-weight: 700;
+  box-shadow: 0 6px 14px -10px rgba(64, 158, 255, 0.72);
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.landing-link-button:hover,
+.landing-link-button:focus-visible {
+  background: var(--app-accent-dark);
+  box-shadow: 0 12px 20px -10px rgba(64, 158, 255, 0.7);
+  transform: translateY(-2px);
+}
+
+.landing-link-button:focus-visible {
+  outline: 2px solid rgba(64, 158, 255, 0.4);
+  outline-offset: 3px;
+}
+
+.landing-link-button:active {
+  box-shadow: 0 5px 10px -9px rgba(64, 158, 255, 0.72);
+  transform: translateY(0) scale(0.98);
+}
+
+.landing-link-button:disabled {
+  color: rgba(255, 255, 255, 0.9);
+  background: #6aa9ec;
+  box-shadow: none;
+  cursor: wait;
+  transform: none;
+}
+
+.landing-link-button:disabled:hover,
+.landing-link-button:disabled:focus-visible,
+.landing-link-button:disabled:active {
+  background: #6aa9ec;
+  box-shadow: none;
+  transform: none;
+}
+
+.landing-link-button-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  display: block;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.landing-link-button:hover .landing-link-button-icon,
+.landing-link-button:focus-visible .landing-link-button-icon {
+  transform: translateX(3px);
+}
+
+.landing-link-button:disabled:hover .landing-link-button-icon,
+.landing-link-button:disabled:focus-visible .landing-link-button-icon,
+.landing-link-button:disabled:active .landing-link-button-icon {
+  transform: none;
 }
 
 .auth-page {
@@ -722,14 +776,14 @@
   z-index: 1;
   width: 100%;
   max-width: 380px;
-  perspective: 1800px;
+  perspective: 1600px;
 }
 
 .auth-flip-inner {
-  position: relative;
+  display: grid;
   width: 100%;
   transform-style: preserve-3d;
-  transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 620ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .auth-flip.is-flipped .auth-flip-inner {
@@ -737,17 +791,14 @@
 }
 
 .auth-flip-face {
+  grid-area: 1 / 1;
+  width: 100%;
+  align-self: center;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
 }
 
-.auth-flip-front {
-  position: relative;
-}
-
 .auth-flip-back {
-  position: absolute;
-  inset: 0;
   transform: rotateY(180deg);
 }
 
@@ -825,8 +876,9 @@
   transition: border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
-.auth-input:focus {
-  outline: none;
+.auth-input:focus-visible {
+  outline: 2px solid rgba(64, 158, 255, 0.32);
+  outline-offset: 2px;
   border-color: rgba(64, 158, 255, 0.42);
   box-shadow: inset 0 0 0 1px rgba(64, 158, 255, 0.22);
 }
@@ -842,10 +894,50 @@
 }
 
 .auth-submit {
-  margin-top: 4px;
-  height: 44px;
+  min-height: 46px;
+  height: 46px;
   width: 100%;
-  border-radius: 999px;
+  margin-top: 4px;
+  padding: 0 16px;
+  border-radius: 8px;
+  border-color: #2f8ff0;
+  background: #2f8ff0;
+  font-size: 14px;
+  font-weight: 800;
+  box-shadow: 0 4px 8px -5px rgba(51, 126, 204, 0.52);
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.auth-submit:not(:disabled):hover,
+.auth-submit:not(:disabled):focus-visible {
+  border-color: #267fd9;
+  background: #267fd9;
+  box-shadow: 0 7px 12px -7px rgba(51, 126, 204, 0.58);
+  transform: translateY(-1px);
+}
+
+.auth-submit:not(:disabled):active {
+  box-shadow: 0 2px 5px -4px rgba(51, 126, 204, 0.5);
+  transform: translateY(1px) scale(0.985);
+}
+
+.auth-submit:disabled,
+.auth-submit:disabled:hover {
+  cursor: wait;
+  opacity: 0.82;
+  border-color: #2f8ff0;
+  background: #2f8ff0;
+  box-shadow: none;
+  transform: none;
+}
+
+.auth-submit-spinner {
+  flex: 0 0 16px;
+  animation: auth-submit-spin 720ms linear infinite;
 }
 
 .auth-switch {
@@ -916,7 +1008,7 @@
     gap: 14px;
   }
 
-  .capability-mark svg {
+  .capability-mark-icon {
     width: 46px;
     height: 46px;
     flex-basis: 46px;
@@ -932,10 +1024,6 @@
     width: min(100%, calc(100% - 24px));
     min-height: 68px;
     gap: 12px;
-  }
-
-  .landing-brand-copy small {
-    display: none;
   }
 
   .landing-version-pill {
@@ -998,6 +1086,32 @@
     will-change: auto;
   }
 
+  .auth-flip-inner {
+    transition: none;
+    transform: none !important;
+    will-change: auto;
+  }
+
+  .auth-flip-face {
+    transform: none;
+  }
+
+  .auth-flip-face[aria-hidden='true'] {
+    display: none;
+  }
+
+  .auth-submit,
+  .auth-submit-spinner {
+    transition: none;
+    animation: none;
+  }
+
+  .auth-submit:not(:disabled):hover,
+  .auth-submit:not(:disabled):focus-visible,
+  .auth-submit:not(:disabled):active {
+    transform: none;
+  }
+
   .hero-btn {
     transition: none;
   }
@@ -1005,4 +1119,33 @@
   .hero-btn:active {
     transform: none;
   }
+
+  .landing-link-button,
+  .landing-link-button-icon {
+    transition: none;
+  }
+
+  .landing-link-button:hover,
+  .landing-link-button:focus-visible,
+  .landing-link-button:active,
+  .landing-link-button:hover .landing-link-button-icon,
+  .landing-link-button:focus-visible .landing-link-button-icon {
+    transform: none;
+  }
+}
+
+/* 首页隐藏视口滚动条（仅视觉），保留滚动能力。作用域由 body.landing-scroll-hidden 控制，
+   LandingPage 卸载时会移除该 class，因此工作台/登录注册页的滚动条不受影响。 */
+body.landing-scroll-hidden {
+  scrollbar-width: none; /* Firefox */
+}
+
+html:has(body.landing-scroll-hidden) {
+  -ms-overflow-style: none; /* 老 IE/Edge */
+}
+
+html:has(body.landing-scroll-hidden)::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none; /* Chromium / WebKit */
 }

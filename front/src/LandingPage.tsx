@@ -1,33 +1,63 @@
 import { useEffect, useState } from 'react';
-import {
-  Copy,
-  Database,
-  FlaskConical,
-  Globe,
-  LayoutDashboard,
-  Network,
-  Rocket,
-} from 'lucide-react';
 import loginIcon from './images/登录.svg';
 import registerIcon from './images/注册.svg';
 import copyIcon from './images/复制.svg';
 import brandLogo from './images/Logo.svg';
+import workbenchIcon from './images/工作台.svg';
+import capabilityOmeletIcon from './images/capability-omelet.svg';
+import capabilityCaMatrixIcon from './images/capability-ca-matrix.svg';
+import capabilityOmeletSvIcon from './images/capability-omelet-sv.svg';
+import capabilityPythonIcon from './images/capability-python.svg';
+import capabilityFastapiIcon from './images/capability-fastapi.svg';
+import capabilityNumpyIcon from './images/capability-numpy.svg';
+import capabilityScipyIcon from './images/capability-scipy.svg';
+import capabilityEchartsIcon from './images/capability-echarts.svg';
 
-const BACKEND_URL = 'http://localhost:5173';
-const ENDPOINTS = [
-  '/api/auth/login',
-  '/api/auth/register',
+const DEFAULT_FRONTEND_ORIGIN = 'http://127.0.0.1:5173';
+const ACCESS_PATHS = [
+  '/login',
+  '/register',
 ];
 
+function getFrontendOrigin() {
+  return typeof window === 'undefined' ? DEFAULT_FRONTEND_ORIGIN : window.location.origin;
+}
+
+async function copyUrl(value: string) {
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  if (typeof document === 'undefined') {
+    throw new Error('当前环境不支持复制地址');
+  }
+
+  const input = document.createElement('textarea');
+  input.value = value;
+  input.setAttribute('readonly', '');
+  input.style.position = 'fixed';
+  input.style.opacity = '0';
+  document.body.appendChild(input);
+  input.select();
+  const copied = document.execCommand('copy');
+  document.body.removeChild(input);
+
+  if (!copied) {
+    throw new Error('复制地址失败');
+  }
+}
+
+// 首页能力条使用本地 SVG，避免首屏依赖第三方图标服务。
 const CAPABILITY_MARKS = [
-  { label: '数据导入', short: 'DATA', display: 'OMELET', icon: Database, tone: 'blue' },
-  { label: 'CA 矩阵', short: 'CA', display: 'CA Matrix', icon: Network, tone: 'indigo' },
-  { label: 'OMELET-SV', short: 'SV', display: 'OMELET-SV', icon: LayoutDashboard, tone: 'cyan' },
-  { label: '多核学习', short: 'MKL', display: 'Python', icon: Globe, tone: 'violet' },
-  { label: 'Python 算法实现', short: 'PY', display: 'FastAPI', icon: FlaskConical, tone: 'green' },
-  { label: 'FastAPI 服务编排', short: 'API', display: 'NumPy', icon: Rocket, tone: 'orange' },
-  { label: '可视化看板', short: 'CHART', display: 'SciPy', icon: LayoutDashboard, tone: 'blue' },
-  { label: '结果导出', short: 'EXPORT', display: 'ECharts', icon: Copy, tone: 'slate' },
+  { label: '数据导入', short: 'DATA', display: 'OMELET', icon: capabilityOmeletIcon, tone: 'blue' },
+  { label: 'CA 矩阵', short: 'CA', display: 'CA Matrix', icon: capabilityCaMatrixIcon, tone: 'indigo' },
+  { label: 'OMELET-SV', short: 'SV', display: 'OMELET-SV', icon: capabilityOmeletSvIcon, tone: 'cyan' },
+  { label: '多核学习', short: 'MKL', display: 'Python', icon: capabilityPythonIcon, tone: 'violet' },
+  { label: 'Python 算法实现', short: 'PY', display: 'FastAPI', icon: capabilityFastapiIcon, tone: 'green' },
+  { label: 'FastAPI 服务编排', short: 'API', display: 'NumPy', icon: capabilityNumpyIcon, tone: 'orange' },
+  { label: '可视化看板', short: 'CHART', display: 'SciPy', icon: capabilityScipyIcon, tone: 'blue' },
+  { label: '结果导出', short: 'EXPORT', display: 'ECharts', icon: capabilityEchartsIcon, tone: 'slate' },
 ] as const;
 
 const DETAIL_CARDS = [
@@ -63,11 +93,10 @@ function TopBar() {
       <div className="landing-topbar-inner">
         <div className="landing-brand">
           <span className="brand-logo" aria-hidden="true">
-            <img className="brand-logo-image" src={brandLogo} alt="" aria-hidden="true" />
+            <img className="brand-logo-image" src={brandLogo} width={32} height={32} alt="" aria-hidden="true" />
           </span>
           <span className="landing-brand-copy">
             <strong>OMELET Lab</strong>
-            <small>新材料聚类分析</small>
           </span>
         </div>
         <span className="landing-version-pill" aria-label="当前版本 v1.0.0">
@@ -81,22 +110,23 @@ function TopBar() {
 function BaseUrlRow() {
   const [index, setIndex] = useState(0);
   const [copied, setCopied] = useState(false);
+  const frontendOrigin = getFrontendOrigin();
+  const activePath = ACCESS_PATHS[index];
+  const fullAccessUrl = `${frontendOrigin}${activePath}`;
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia === 'undefined') return;
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
     if (mq.matches) return;
     const timer = setInterval(() => {
-      setIndex((prev) => (prev + 1) % ENDPOINTS.length);
+      setIndex((prev) => (prev + 1) % ACCESS_PATHS.length);
     }, 3000);
     return () => clearInterval(timer);
   }, []);
 
   const handleCopy = async () => {
     try {
-      if (typeof navigator !== 'undefined' && navigator.clipboard) {
-        await navigator.clipboard.writeText(BACKEND_URL);
-      }
+      await copyUrl(fullAccessUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -105,10 +135,10 @@ function BaseUrlRow() {
   };
 
   return (
-    <div className="base-url-row" role="group" aria-label="后端服务地址">
-      <span className="base-url-address">{BACKEND_URL}</span>
-      <span key={ENDPOINTS[index]} className="base-url-endpoint">
-        {ENDPOINTS[index]}
+    <div className="base-url-row" role="group" aria-label="登录或注册页面地址">
+      <span className="base-url-address" title={frontendOrigin}>{frontendOrigin}</span>
+      <span key={activePath} className="base-url-endpoint" title={activePath}>
+        {activePath}
       </span>
       <button
         type="button"
@@ -116,8 +146,11 @@ function BaseUrlRow() {
         aria-label={copied ? '已复制地址' : '复制地址'}
         onClick={handleCopy}
       >
-        <img className="base-url-copy-icon" src={copyIcon} alt="" aria-hidden="true" />
+        <img className="base-url-copy-icon" src={copyIcon} width={14} height={14} alt="" aria-hidden="true" />
       </button>
+      <span className="sr-only" aria-live="polite">
+        {copied ? '地址已复制' : ''}
+      </span>
     </div>
   );
 }
@@ -141,7 +174,7 @@ function Hero({
             <span className="shine-text">数据分析统一平台</span>
           </h1>
           <p className="hero-subtitle">
-            立即进入平台，只需访问以下地址：
+            登录或注册页面地址：
           </p>
         </div>
 
@@ -149,11 +182,11 @@ function Hero({
 
         <div className="hero-buttons" aria-label="首页账号操作">
           <button type="button" className="btn btn-primary hero-btn" onClick={onLogin}>
-            <img className="hero-btn-icon" src={loginIcon} alt="" aria-hidden="true" />
+            <img className="hero-btn-icon" src={loginIcon} width={16} height={16} alt="" aria-hidden="true" />
             登录
           </button>
           <button type="button" className="btn btn-secondary hero-btn" onClick={onRegister}>
-            <img className="hero-btn-icon" src={registerIcon} alt="" aria-hidden="true" />
+            <img className="hero-btn-icon" src={registerIcon} width={16} height={16} alt="" aria-hidden="true" />
             注册
           </button>
         </div>
@@ -170,7 +203,6 @@ function CapabilityStrip() {
       <h2 id="capability-title">覆盖完整的分析链路</h2>
       <div className="capability-mark-grid" aria-label="分析链路能力">
         {CAPABILITY_MARKS.map((item) => {
-          const Icon = item.icon;
           return (
             <span
               key={item.label}
@@ -178,7 +210,7 @@ function CapabilityStrip() {
               aria-label={item.label}
               title={item.label}
             >
-              <Icon aria-hidden="true" />
+              <img className="capability-mark-icon" src={item.icon} alt="" aria-hidden="true" />
               <strong>{item.short}</strong>
               <span className="capability-mark-label">{item.display}</span>
             </span>
@@ -215,7 +247,13 @@ function DetailSection() {
   );
 }
 
-function AboutSection({ onEnterWorkbench }: { onEnterWorkbench: () => void }) {
+function AboutSection({
+  onEnterWorkbench,
+  isEnteringWorkbench,
+}: {
+  onEnterWorkbench: () => void | Promise<void>;
+  isEnteringWorkbench: boolean;
+}) {
   return (
     <section className="landing-section landing-section-compact" id="about" aria-labelledby="about-title">
       <div className="landing-section-inner landing-about-card">
@@ -226,9 +264,22 @@ function AboutSection({ onEnterWorkbench }: { onEnterWorkbench: () => void }) {
             系统以新材料数据分析为场景，串联数据管理、协关联矩阵分析、多核相似性学习、性能评估、可视化展示与结果导出，支撑从基础聚类结果导入到聚类分析报告生成的完整流程。
           </p>
         </div>
-        <button type="button" className="landing-link-button" onClick={onEnterWorkbench}>
-          前往分析工作台
-          <LayoutDashboard size={15} aria-hidden="true" />
+        <button
+          type="button"
+          className="landing-link-button"
+          disabled={isEnteringWorkbench}
+          aria-busy={isEnteringWorkbench}
+          onClick={() => void onEnterWorkbench()}
+        >
+          {isEnteringWorkbench ? '正在验证登录状态' : '前往分析工作台'}
+          <img
+            className="landing-link-button-icon"
+            src={workbenchIcon}
+            width={16}
+            height={16}
+            alt=""
+            aria-hidden="true"
+          />
         </button>
       </div>
     </section>
@@ -239,18 +290,28 @@ export function LandingPage({
   onLogin,
   onRegister,
   onEnterWorkbench,
+  isEnteringWorkbench = false,
 }: {
   onLogin: () => void;
   onRegister: () => void;
-  onEnterWorkbench: () => void;
+  onEnterWorkbench: () => void | Promise<void>;
+  isEnteringWorkbench?: boolean;
 }) {
+  // 首页隐藏视口滚动条（仅视觉），卸载时恢复其他页面的默认滚动条。
+  useEffect(() => {
+    document.body.classList.add('landing-scroll-hidden');
+    return () => {
+      document.body.classList.remove('landing-scroll-hidden');
+    };
+  }, []);
+
   return (
     <div className="landing-page">
       <TopBar />
       <main className="landing-main">
         <Hero onLogin={onLogin} onRegister={onRegister} />
         <DetailSection />
-        <AboutSection onEnterWorkbench={onEnterWorkbench} />
+        <AboutSection onEnterWorkbench={onEnterWorkbench} isEnteringWorkbench={isEnteringWorkbench} />
       </main>
     </div>
   );

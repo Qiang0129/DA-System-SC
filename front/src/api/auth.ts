@@ -1,3 +1,5 @@
+import { API_BASE_URL } from './config';
+
 export type AuthUser = {
   id: number;
   username: string;
@@ -18,8 +20,6 @@ export const AUTH_STORAGE_KEYS = {
   refreshToken: 'soft_web_refresh_token',
   user: 'soft_web_user',
 } as const;
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api';
 
 async function requestJson<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
