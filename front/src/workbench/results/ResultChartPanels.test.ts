@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildConvergenceOption,
+  buildEvaluationTrendOption,
   buildKernelRunsOption,
   buildMetricRunsOption,
+  getConvergenceRelativeValue,
   getHeatmapValue,
   getKernelRelativeChange,
   getMatrixScalePosition,
@@ -45,6 +47,66 @@ describe('buildMetricRunsOption', () => {
   });
 });
 
+describe('buildEvaluationTrendOption', () => {
+  it('uses a focused metric scale and exposes the mean and run context', () => {
+    const evaluationResult = {
+      metrics: {
+        aggregate: {
+          acc: { mean: 0.712, std: 0.005, min: 0.704, max: 0.719 },
+          nmi: { mean: 0.134, std: 0.004, min: 0.129, max: 0.141 },
+          ari: { mean: 0.177, std: 0.006, min: 0.169, max: 0.186 },
+          f1: { mean: 0.604, std: 0.004, min: 0.598, max: 0.612 },
+        },
+        runs: [
+          { run: 1, seed: 11, runtimeSeconds: 0.4, acc: 0.704, nmi: 0.129, ari: 0.169, f1: 0.598 },
+          { run: 2, seed: 12, runtimeSeconds: 0.5, acc: 0.719, nmi: 0.141, ari: 0.186, f1: 0.612 },
+        ],
+      },
+    } as AnalysisResult;
+    const option = buildEvaluationTrendOption(evaluationResult, 'nmi');
+    const axis = option.yAxis as any;
+    const series = (option.series as any[])[0];
+    const tooltip = option.tooltip as any;
+
+    expect(axis.min).toBeLessThan(12.9);
+    expect(axis.max).toBeGreaterThan(14.1);
+    expect(series.name).toBe('NMI');
+    expect(series.data).toEqual([12.9, 14.1]);
+    expect(series.markLine.data).toEqual([{ yAxis: 13.4 }]);
+    expect(tooltip.formatter([{ dataIndex: 1 }])).toContain('随机种子：12');
+    expect(tooltip.formatter([{ dataIndex: 1 }])).toContain('NMI：14.10%');
+  });
+
+  it('centers relative values on the persisted metric mean without changing raw values', () => {
+    const evaluationResult = {
+      metrics: {
+        aggregate: {
+          acc: { mean: 0.712, std: 0.005, min: 0.704, max: 0.719 },
+          nmi: { mean: 0.134, std: 0.004, min: 0.129, max: 0.141 },
+          ari: { mean: 0.177, std: 0.006, min: 0.169, max: 0.186 },
+          f1: { mean: 0.604, std: 0.004, min: 0.598, max: 0.612 },
+        },
+        runs: [
+          { run: 1, seed: 11, runtimeSeconds: 0.4, acc: 0.704, nmi: 0.129, ari: 0.169, f1: 0.598 },
+          { run: 2, seed: 12, runtimeSeconds: 0.5, acc: 0.719, nmi: 0.141, ari: 0.186, f1: 0.612 },
+        ],
+      },
+    } as AnalysisResult;
+    const option = buildEvaluationTrendOption(evaluationResult, 'nmi', 'relative');
+    const axis = option.yAxis as any;
+    const series = (option.series as any[])[0];
+    const tooltip = option.tooltip as any;
+
+    expect(axis.name).toBe('相对均值（百分点）');
+    expect(axis.min).toBeLessThan(0);
+    expect(axis.max).toBeGreaterThan(0);
+    expect(series.data).toEqual([-0.5, 0.7]);
+    expect(series.markLine.data).toEqual([{ yAxis: 0 }]);
+    expect(tooltip.formatter([{ dataIndex: 1 }])).toContain('NMI：14.10%');
+    expect(tooltip.formatter([{ dataIndex: 1 }])).toContain('相对均值：+0.70 个百分点');
+  });
+});
+
 describe('buildConvergenceOption', () => {
   it('reserves enough top space for the objective axis name and highest tick', () => {
     const convergenceResult = {
@@ -72,6 +134,32 @@ describe('buildConvergenceOption', () => {
       align: 'left',
       padding: [0, 0, 4, 0],
     });
+  });
+
+  it('supports relative and logarithmic views without changing raw objectives', () => {
+    const convergenceResult = {
+      convergence: {
+        runs: [
+          {
+            run: 1,
+            points: [
+              { iteration: 1, objective: 100 },
+              { iteration: 2, objective: 25 },
+              { iteration: 3, objective: 5 },
+            ],
+          },
+        ],
+      },
+    } as AnalysisResult;
+    const relative = buildConvergenceOption(convergenceResult, 1, 'relative');
+    const logarithmic = buildConvergenceOption(convergenceResult, 1, 'log');
+
+    expect(getConvergenceRelativeValue(25, 100)).toBe(25);
+    expect((relative.series as any[])[0].data).toEqual([100, 25, 5]);
+    expect((relative.yAxis as any).name).toBe('相对初始值');
+    expect((relative.series as any[])[0].markLine.data).toEqual([{ yAxis: 100 }]);
+    expect((logarithmic.yAxis as any).type).toBe('log');
+    expect((logarithmic.series as any[])[0].data).toEqual([100, 25, 5]);
   });
 });
 

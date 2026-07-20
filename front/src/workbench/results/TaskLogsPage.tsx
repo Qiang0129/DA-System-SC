@@ -22,6 +22,7 @@ import {
 import { formatRuntime, getStatusMeta, getTaskRunProgress } from '../tasks/taskStatus';
 import type { AnalysisTaskLog } from '../tasks/types';
 import { downloadTextFile } from './resultPresentation';
+import { ResultBackButton } from './ResultPageShared';
 import type { TaskResultResource } from './types';
 
 type LogLevelFilter = 'all' | 'info' | 'warning' | 'error';
@@ -204,6 +205,7 @@ export function TaskLogsPage({ resource }: { resource: TaskResultResource }) {
             {statusMeta.label}
           </WorkbenchStatus>
         )}
+        backAction={<ResultBackButton taskId={task.id} />}
         actions={(
           <>
             <button

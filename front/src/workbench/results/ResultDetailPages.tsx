@@ -6,6 +6,7 @@ import {
   ArrowRight,
   BarChart3,
   CheckCircle2,
+  Clock3,
   ChevronsDown,
   ChevronsUp,
   Download,
@@ -13,6 +14,7 @@ import {
   FileJson,
   FileSpreadsheet,
   FileText,
+  Gauge,
   HardDrive,
   History,
   Images,
@@ -26,6 +28,7 @@ import {
   TrendingDown,
 } from 'lucide-react';
 import { MathFormula } from '../../components/MathFormula';
+import { SelectField } from '../../components/SelectField';
 import { createTaskExport, downloadProtectedFile, fetchTaskExports } from '../../api/results';
 import {
   WorkbenchMetricStrip,
@@ -46,6 +49,7 @@ import {
   OptionChartPanel,
   ScatterPanel,
   useResultChart,
+  type ConvergenceChartMode,
 } from './ResultChartPanels';
 import { MetricStrip, ReadyHeader } from './ResultPageShared';
 import {
@@ -257,17 +261,17 @@ export function CaResultPage({ resource }: { resource: TaskResultResource }) {
           meta={`忽略对角线后按 CA 数值降序展示，当前显示 ${visibleTopPairs.length} / ${availableTopPairCount} 组`}
           actions={availableTopPairCount ? (
             <div className="result-panel-actions">
-              <label className="result-top-pair-control">
+              <div className="result-top-pair-control">
                 <span>显示数量</span>
-                <select
-                  className="result-run-select result-top-pair-select"
-                  value={topPairCount}
-                  onChange={(event) => setTopPairCount(Number(event.target.value))}
-                  aria-label="选择高协关联样本对显示数量"
-                >
-                  {topPairCountOptions.map((count) => <option key={count} value={count}>Top {count}</option>)}
-                </select>
-              </label>
+                <SelectField
+                  value={String(topPairCount)}
+                  options={topPairCountOptions.map((count) => ({ value: String(count), label: `Top ${count}` }))}
+                  onChange={(value) => setTopPairCount(Number(value))}
+                  ariaLabel="选择高协关联样本对显示数量"
+                  size="sm"
+                  className="result-select-field result-top-pair-select-field"
+                />
+              </div>
             </div>
           ) : null}
         />
@@ -400,32 +404,122 @@ function objectiveReduction(initial?: number, final?: number) {
   return (initial - final) / Math.abs(initial);
 }
 
+function formatObjective(value?: number) {
+  if (value == null || !Number.isFinite(value)) return '—';
+  const absolute = Math.abs(value);
+  if (absolute >= 1_000_000 || (absolute > 0 && absolute < 0.001)) return value.toExponential(3);
+  return formatNumber(value, 5);
+}
+
+function formatDuration(seconds?: number | null) {
+  if (seconds == null || !Number.isFinite(seconds)) return '—';
+  if (seconds < 60) return `${formatNumber(seconds, 2)} s`;
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}m ${formatNumber(seconds - minutes * 60, 1)}s`;
+}
+
+function relativeObjectiveText(value: number | undefined, initial: number | undefined) {
+  if (value == null || initial == null || !Number.isFinite(value) || !Number.isFinite(initial) || initial === 0) return '—';
+  return `${formatNumber((value / initial) * 100, 2)}%`;
+}
+
+function variationText(mean: number, std: number) {
+  if (!Number.isFinite(mean) || !Number.isFinite(std) || mean === 0) return '—';
+  return formatPercent(std / Math.abs(mean));
+}
+
 export function MklResultPage({ resource }: { resource: TaskResultResource }) {
   const result = resource.envelope!.result!;
   const [run, setRun] = useState(result.convergence.representativeRun);
+  const [chartMode, setChartMode] = useState<ConvergenceChartMode>('objective');
   useEffect(() => setRun(result.convergence.representativeRun), [result.convergence.representativeRun]);
   const current = result.convergence.runs.find((item) => item.run === run) ?? result.convergence.runs[0];
-  const option = useMemo(() => buildConvergenceOption(result, current?.run ?? run), [current?.run, result, run]);
-  const chartRef = useResultChart(option);
   const points = current?.points ?? [];
   const firstPoint = points[0];
   const finalPoint = points[points.length - 1];
   const reduction = objectiveReduction(firstPoint?.objective, finalPoint?.objective);
+  const canUseLogMode = points.some((point) => point.objective > 0);
+  useEffect(() => {
+    if (chartMode === 'log' && !canUseLogMode) setChartMode('objective');
+  }, [canUseLogMode, chartMode]);
+  const option = useMemo(
+    () => buildConvergenceOption(result, current?.run ?? run, chartMode),
+    [chartMode, current?.run, result, run],
+  );
+  const chartRef = useResultChart(option);
   const weights = result.kernelWeights.items;
-  const largestWeight = Math.max(0, ...weights.map((item) => item.representative));
+  const sortedWeights = [...weights].sort((left, right) => Math.abs(right.representative) - Math.abs(left.representative));
+  const largestWeight = Math.max(0, ...weights.map((item) => Math.abs(item.representative)));
+  const dominantWeight = sortedWeights[0];
+  const dominantDefinition = kernelDefinitions.find((item) => item.key === dominantWeight?.key);
+  const representativeWeightSum = weights.reduce((sum, item) => sum + item.representative, 0);
+  const statusText = !current ? '暂无可用求解轨迹' : current.converged ? '已达到收敛阈值' : '已完成预设迭代';
+  const chartModes: Array<{ key: ConvergenceChartMode; label: string; disabled?: boolean }> = [
+    { key: 'objective', label: '原始目标' },
+    { key: 'relative', label: '相对目标' },
+    { key: 'log', label: '对数目标', disabled: !canUseLogMode },
+  ];
 
   return (
     <section className="soft-page result-detail-page result-mkl-page">
       <ReadyHeader title="多核相似性学习" icon={Network} resource={resource} />
+      <section className="result-mkl-summary" aria-label="求解结论">
+        <div className="result-mkl-summary-lead">
+          <span className="result-mkl-summary-icon" aria-hidden="true"><Gauge size={21} /></span>
+          <div>
+            <span>求解结论</span>
+            <strong>{statusText}</strong>
+            <small>{current ? `第 ${current.run} 轮 · ${points.length} 个迭代点` : '当前结果没有可展示的轮次'}</small>
+          </div>
+          <WorkbenchStatus tone={!current ? 'warning' : current.converged ? 'success' : 'info'}>
+            {!current ? '无数据' : current.converged ? '提前收敛' : '达到迭代上限'}
+          </WorkbenchStatus>
+        </div>
+        <dl className="result-mkl-summary-metrics">
+          <div><dt><History size={13} aria-hidden="true" />当前轮次</dt><dd>第 {current?.run ?? '—'} 轮</dd></div>
+          <div><dt><ListChecks size={13} aria-hidden="true" />迭代点数</dt><dd>{points.length || '—'}</dd></div>
+          <div><dt><TrendingDown size={13} aria-hidden="true" />目标下降</dt><dd>{formatPercent(reduction)}</dd></div>
+          <div><dt><Target size={13} aria-hidden="true" />最终目标</dt><dd>{formatObjective(finalPoint?.objective)}</dd></div>
+          <div><dt><Clock3 size={13} aria-hidden="true" />运行耗时</dt><dd>{formatDuration(result.runtimeSeconds)}</dd></div>
+          <div><dt><Network size={13} aria-hidden="true" />主导核</dt><dd>{dominantDefinition?.name ?? '—'}</dd><small>{dominantWeight ? `alpha ${formatNumber(dominantWeight.representative, 5)}` : '暂无权重'}</small></div>
+        </dl>
+      </section>
+
       <section className="panel result-mkl-solver-panel">
         <WorkbenchSectionHeader
           title="求解轨迹"
-          meta="跟踪目标函数下降过程，并检查每一轮优化是否达到终止条件"
-          actions={result.convergence.runs.length ? (
-            <select className="result-run-select" value={current?.run ?? ''} onChange={(event) => setRun(Number(event.target.value))} aria-label="选择求解轮次">
-              {result.convergence.runs.map((item) => <option key={item.run} value={item.run}>第 {item.run} 轮</option>)}
-            </select>
-          ) : null}
+          meta="选择轮次与显示尺度，查看目标函数下降和终止条件"
+          actions={
+            <div className="result-mkl-toolbar">
+              <div className="result-mkl-view-toggle" role="group" aria-label="收敛图表视图">
+                {chartModes.map((item) => (
+                  <button
+                    type="button"
+                    key={item.key}
+                    className={chartMode === item.key ? 'active' : undefined}
+                    aria-pressed={chartMode === item.key}
+                    disabled={item.disabled}
+                    onClick={() => setChartMode(item.key)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              {result.convergence.runs.length ? (
+                <div className="result-mkl-run-control">
+                  <span>求解轮次</span>
+                  <SelectField
+                    value={String(current?.run ?? '')}
+                    options={result.convergence.runs.map((item) => ({ value: String(item.run), label: `第 ${item.run} 轮` }))}
+                    onChange={(value) => setRun(Number(value))}
+                    ariaLabel="选择求解轮次"
+                    size="sm"
+                    className="result-select-field result-mkl-run-select-field"
+                  />
+                </div>
+              ) : null}
+            </div>
+          }
         />
         <div className="result-mkl-solver-workspace">
           <div className="result-mkl-chart-area">
@@ -438,12 +532,16 @@ export function MklResultPage({ resource }: { resource: TaskResultResource }) {
             </header>
             <dl>
               <div><dt>迭代点数</dt><dd>{points.length}</dd></div>
-              <div><dt>初始目标函数</dt><dd>{formatNumber(firstPoint?.objective, 5)}</dd></div>
-              <div><dt>最终目标函数</dt><dd>{formatNumber(finalPoint?.objective, 5)}</dd></div>
+              <div><dt>初始目标函数</dt><dd>{formatObjective(firstPoint?.objective)}</dd></div>
+              <div><dt>最终目标函数</dt><dd>{formatObjective(finalPoint?.objective)}</dd></div>
               <div><dt>目标下降幅度</dt><dd>{formatPercent(reduction)}</dd></div>
               <div><dt>最终相对变化</dt><dd>{formatPercent(finalPoint?.relativeChange)}</dd></div>
               <div><dt>代表轮次</dt><dd>第 {result.convergence.representativeRun} 轮</dd></div>
             </dl>
+            <div className="result-mkl-diagnostic-note">
+              <CheckCircle2 size={14} aria-hidden="true" />
+              <span>{current?.converged ? '终止依据：达到求解器收敛阈值。' : '终止依据：达到任务设置的最大迭代次数。'}</span>
+            </div>
             <p>诊断值直接取自求解器轨迹，不使用性能指标替代优化过程。</p>
           </aside>
         </div>
@@ -451,16 +549,17 @@ export function MklResultPage({ resource }: { resource: TaskResultResource }) {
 
       <div className="result-mkl-detail-grid">
         <section className="panel result-mkl-iteration-panel">
-          <WorkbenchSectionHeader title="迭代明细" meta={current ? `第 ${current.run} 轮的完整目标函数序列` : '当前没有可展示的迭代记录'} />
+          <WorkbenchSectionHeader title="迭代明细" meta={current ? `第 ${current.run} 轮的完整目标函数序列` : '当前没有可展示的迭代记录'} actions={<WorkbenchStatus tone={points.length ? 'info' : 'warning'}>{points.length ? `${points.length} 个节点` : '暂无数据'}</WorkbenchStatus>} />
           {points.length ? (
             <div className="result-mkl-iteration-table" role="table" aria-label="迭代目标函数明细">
-              <div className="result-mkl-iteration-row header" role="row"><span>迭代</span><span>目标函数</span><span>相对变化</span><span>状态</span></div>
+              <div className="result-mkl-iteration-row header" role="row"><span role="columnheader">迭代</span><span role="columnheader">目标函数</span><span role="columnheader">相对初始</span><span role="columnheader">本轮变化</span><span role="columnheader">状态</span></div>
               {points.map((point, index) => (
-                <div className="result-mkl-iteration-row" role="row" key={point.iteration}>
-                  <strong>第 {point.iteration} 次</strong>
-                  <span>{formatNumber(point.objective, 5)}</span>
-                  <span>{formatPercent(point.relativeChange)}</span>
-                  <span>{index === points.length - 1 ? (current?.converged ? '收敛点' : '终止点') : '迭代中'}</span>
+                <div className={`result-mkl-iteration-row${index === points.length - 1 ? ' is-terminal' : ''}`} role="row" key={point.iteration}>
+                  <strong role="cell">第 {point.iteration} 次</strong>
+                  <span role="cell">{formatObjective(point.objective)}</span>
+                  <span role="cell">{relativeObjectiveText(point.objective, firstPoint?.objective)}</span>
+                  <span role="cell">{formatPercent(point.relativeChange)}</span>
+                  <span role="cell">{index === points.length - 1 ? (current?.converged ? '收敛点' : '终止点') : '迭代中'}</span>
                 </div>
               ))}
             </div>
@@ -468,25 +567,57 @@ export function MklResultPage({ resource }: { resource: TaskResultResource }) {
         </section>
 
         <section className="panel result-mkl-mixture-panel">
-          <WorkbenchSectionHeader title="代表轮次核组合" meta="使用代表轮次原始 alpha 展示最终学习结果" actions={<WorkbenchStatus tone={weights.length ? 'success' : 'warning'}>{weights.length} 个核</WorkbenchStatus>} />
+          <WorkbenchSectionHeader title="代表轮次核组合" meta="按代表轮次原始 alpha 排序，保留重复实验稳定性" actions={<WorkbenchStatus tone={weights.length ? 'success' : 'warning'}>{weights.length} 个核</WorkbenchStatus>} />
           {weights.length ? (
             <div className="result-mkl-mixture-list">
-              {weights.map((item, index) => {
+              {sortedWeights.map((item, index) => {
                 const definition = kernelDefinitions.find((currentItem) => currentItem.key === item.key);
-                const width = largestWeight > 0 ? Math.max(1, item.representative / largestWeight * 100) : 0;
+                const width = largestWeight > 0 ? Math.max(1, Math.abs(item.representative) / largestWeight * 100) : 0;
                 return (
-                  <div className={`tone-${index + 1}`} key={item.key}>
-                    <span><strong>{definition?.name ?? item.key}</strong><em>{formatNumber(item.representative, 5)}</em></span>
-                    <i aria-hidden="true"><b style={{ width: `${width}%` }} /></i>
-                    <small>均值 {formatNumber(item.mean, 5)} · std {formatNumber(item.std, 5)}</small>
+                  <div className={`result-mkl-mixture-row tone-${index + 1}${index === 0 ? ' is-dominant' : ''}`} key={item.key}>
+                    <span className="result-mkl-mixture-rank">{String(index + 1).padStart(2, '0')}</span>
+                    <div className="result-mkl-mixture-body">
+                      <header>
+                        <div><strong>{definition?.name ?? item.key}</strong><small>{definition?.short ?? item.key}</small></div>
+                        <em>{formatNumber(item.representative, 5)}</em>
+                      </header>
+                      <i aria-hidden="true"><b style={{ width: `${width}%` }} /></i>
+                      <small className="result-mkl-mixture-meta"><span>均值 {formatNumber(item.mean, 5)}</span><span>std {formatNumber(item.std, 5)}</span><span>波动率 {variationText(item.mean, item.std)}</span></small>
+                    </div>
                   </div>
                 );
               })}
             </div>
           ) : <WorkbenchNotice tone="info" icon={Network} title="暂无核组合" detail="当前结果没有记录代表轮次的核权重。" />}
-          <p className="result-mkl-mixture-note">条形长度以当前最大权重为参照，标签数值始终保留原始 alpha。</p>
+          <p className="result-mkl-mixture-note">条形长度按代表 alpha 的绝对值缩放；总和 {formatNumber(representativeWeightSum, 5)}，不在前端重新归一化。</p>
         </section>
       </div>
+
+      <section className="panel result-mkl-run-panel" aria-label="多轮运行对比">
+        <WorkbenchSectionHeader title="多轮运行对比" meta="比较每一轮的终止状态与目标函数结果，代表轮次已高亮" actions={<WorkbenchStatus tone="info">{result.convergence.runs.length} 轮记录</WorkbenchStatus>} />
+        {result.convergence.runs.length ? (
+          <div className="result-mkl-run-table" role="table" aria-label="多轮运行对比表">
+            <div className="result-mkl-run-row header" role="row"><span role="columnheader">轮次</span><span role="columnheader">状态</span><span role="columnheader">迭代点</span><span role="columnheader">初始目标</span><span role="columnheader">最终目标</span><span role="columnheader">目标下降</span><span role="columnheader">标记</span></div>
+            {result.convergence.runs.map((runItem) => {
+              const runPoints = runItem.points ?? [];
+              const runInitial = runPoints[0]?.objective;
+              const runFinal = runPoints[runPoints.length - 1]?.objective;
+              const isRepresentative = runItem.run === result.convergence.representativeRun;
+              return (
+                <div className={`result-mkl-run-row${isRepresentative ? ' is-representative' : ''}`} role="row" key={runItem.run}>
+                  <strong role="cell">第 {runItem.run} 轮</strong>
+                  <span role="cell"><WorkbenchStatus tone={runItem.converged ? 'success' : 'info'}>{runItem.converged ? '提前收敛' : '达到上限'}</WorkbenchStatus></span>
+                  <span role="cell">{runPoints.length}</span>
+                  <span role="cell">{formatObjective(runInitial)}</span>
+                  <span role="cell">{formatObjective(runFinal)}</span>
+                  <span role="cell">{formatPercent(objectiveReduction(runInitial, runFinal))}</span>
+                  <span role="cell">{isRepresentative ? '当前代表' : '—'}</span>
+                </div>
+              );
+            })}
+          </div>
+        ) : <WorkbenchNotice tone="info" icon={History} title="暂无多轮记录" detail="任务结果没有返回可用于比较的运行轮次。" />}
+      </section>
     </section>
   );
 }

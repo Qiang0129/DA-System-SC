@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { Boxes, ClipboardCheck, Network, RefreshCw, Target, type LucideIcon } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, Boxes, ClipboardCheck, Network, RefreshCw, Target, type LucideIcon } from 'lucide-react';
 import {
   WorkbenchMetricStrip,
   WorkbenchPageHeader,
@@ -28,6 +29,7 @@ export function ReadyHeader({
       title={title}
       context={`任务 #${task.id} · ${task.datasetName} · ${task.mode} · 第 ${result.preview.summary.representativeRun} 轮代表结果`}
       status={<WorkbenchStatus tone="success">真实结果</WorkbenchStatus>}
+      backAction={<ResultBackButton taskId={task.id} />}
       actions={
         actions ?? (
           <button type="button" className="btn btn-secondary" onClick={resource.refresh}>
@@ -37,6 +39,25 @@ export function ReadyHeader({
         )
       }
     />
+  );
+}
+
+export function ResultBackButton({ taskId }: { taskId?: number | null }) {
+  const navigate = useNavigate();
+
+  function goBack() {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate(taskId ? `/workbench/analysis?taskId=${encodeURIComponent(taskId)}` : '/workbench/analysis');
+  }
+
+  return (
+    <button type="button" className="workbench-page-back-button" onClick={goBack}>
+      <ArrowLeft size={14} aria-hidden="true" />
+      返回
+    </button>
   );
 }
 

@@ -17,6 +17,7 @@ type WorkbenchPageHeaderProps = {
   context: string;
   status?: ReactNode;
   actions?: ReactNode;
+  backAction?: ReactNode;
 };
 
 type WorkbenchSectionHeaderProps = {
@@ -37,10 +38,12 @@ export function WorkbenchPageHeader({
   context,
   status,
   actions,
+  backAction,
 }: WorkbenchPageHeaderProps) {
   return (
     <header className="workbench-page-header">
       <div className="workbench-page-title-block">
+        {backAction ? <div className="workbench-page-back">{backAction}</div> : null}
         <span className="workbench-page-icon" aria-hidden="true">
           <Icon size={20} />
         </span>

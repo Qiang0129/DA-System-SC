@@ -92,7 +92,7 @@ backend/
     schemas.py
     security.py
   config/
-    database.env
+    database.env.example  # 本地配置模板
   sql/
     schema.sql
   tests/
@@ -140,8 +140,16 @@ mysql -u root -p < backend/sql/schema.sql
 
 配置数据库连接：
 
-1. 编辑 `backend/config/database.env`
-2. 根据本地环境修改 `DB_HOST`、`DB_PORT`、`DB_NAME`、`DB_USER`、`DB_PASSWORD`
+1. 首次运行时复制配置模板：
+
+   ```powershell
+   cd "F:\研究生阶段\实验室项目\soft_web"
+   Copy-Item backend/config/database.env.example backend/config/database.env
+   ```
+
+2. 编辑本地文件 `backend/config/database.env`。
+3. 根据本地环境修改 `DB_HOST`、`DB_PORT`、`DB_NAME`、`DB_USER`、`DB_PASSWORD`。
+   该文件包含本地密码，已被 Git 忽略，不要提交到仓库。
 
 在第二个 PowerShell 终端执行：
 

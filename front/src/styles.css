@@ -244,11 +244,17 @@ button {
   position: fixed;
   z-index: var(--z-dropdown);
   overflow-y: auto;
+  scrollbar-width: none;
   padding: 4px;
   border: 1px solid var(--app-border-strong);
   border-radius: var(--panel-radius);
   background: var(--floating-surface);
   box-shadow: 0 8px 14px rgba(15, 23, 42, 0.12);
+}
+
+.select-field-menu::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .select-field-option {

@@ -1,5 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { downloadTextFile } from './resultPresentation';
 import { buildTaskLogsCsv, TaskLogsPage } from './TaskLogsPage';
@@ -58,13 +59,21 @@ function createResource(overrides: Partial<TaskResultResource> = {}): TaskResult
   };
 }
 
+function renderLogs(resource: TaskResultResource) {
+  return render(
+    <MemoryRouter initialEntries={['/workbench/logs?taskId=5']}>
+      <TaskLogsPage resource={resource} />
+    </MemoryRouter>,
+  );
+}
+
 afterEach(() => {
   vi.clearAllMocks();
 });
 
 describe('TaskLogsPage', () => {
   it('显示真实日志统计，并默认按执行顺序排列轮次', () => {
-    render(<TaskLogsPage resource={createResource()} />);
+    renderLogs(createResource());
 
     const scrollRegion = screen.getByRole('region', { name: '可滚动的任务执行日志' });
     expect(scrollRegion).toHaveAttribute('tabindex', '0');
@@ -88,7 +97,7 @@ describe('TaskLogsPage', () => {
 
   it('支持级别筛选、搜索、清除搜索和重置无匹配筛选', async () => {
     const user = userEvent.setup();
-    render(<TaskLogsPage resource={createResource()} />);
+    renderLogs(createResource());
 
     await user.click(screen.getByRole('button', { name: /提醒 1/ }));
     expect(screen.getAllByRole('listitem')).toHaveLength(1);
@@ -111,7 +120,7 @@ describe('TaskLogsPage', () => {
 
   it('可切换最新优先，并导出当前顺序下经过完整转义的 CSV', async () => {
     const user = userEvent.setup();
-    render(<TaskLogsPage resource={createResource()} />);
+    renderLogs(createResource());
 
     const scrollRegion = screen.getByRole('region', { name: '可滚动的任务执行日志' });
     scrollRegion.scrollTop = 120;
@@ -142,13 +151,17 @@ describe('TaskLogsPage', () => {
       },
     });
 
-    const view = render(<TaskLogsPage resource={failedResource} />);
+    const view = renderLogs(failedResource);
     expect(screen.getByRole('alert')).toHaveTextContent('日志服务暂时不可用');
     await user.click(screen.getByRole('button', { name: '重新加载' }));
     expect(refreshLogs).toHaveBeenCalledOnce();
 
     view.unmount();
-    render(<TaskResultViews section="logs" resource={{ ...failedResource, loading: true }} />);
+    render(
+      <MemoryRouter initialEntries={['/workbench/logs?taskId=5']}>
+        <TaskResultViews section="logs" resource={{ ...failedResource, loading: true }} />
+      </MemoryRouter>,
+    );
     expect(screen.getByRole('heading', { name: '运行日志', level: 1 })).toBeInTheDocument();
     expect(screen.getAllByText('失败')).toHaveLength(2);
   });

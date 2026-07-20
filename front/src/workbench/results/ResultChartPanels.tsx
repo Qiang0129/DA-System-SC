@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as echarts from 'echarts';
 import type { EChartsOption } from 'echarts';
 import { Activity } from 'lucide-react';
+import { SelectField } from '../../components/SelectField';
 import { WorkbenchSectionHeader, WorkbenchStatus } from '../WorkbenchUi';
 import type { AnalysisResult, MatrixPreview } from './types';
 import { formatNumber } from './resultPresentation';
@@ -199,27 +200,78 @@ export function buildWeightsOption(result: AnalysisResult): EChartsOption {
   };
 }
 
-export function buildConvergenceOption(result: AnalysisResult, run: number): EChartsOption {
+export type ConvergenceChartMode = 'objective' | 'relative' | 'log';
+
+export function getConvergenceRelativeValue(value: number, initial: number) {
+  if (!Number.isFinite(value) || !Number.isFinite(initial) || initial === 0) return null;
+  return Number(((value / initial) * 100).toFixed(6));
+}
+
+export function buildConvergenceOption(
+  result: AnalysisResult,
+  run: number,
+  mode: ConvergenceChartMode = 'objective',
+): EChartsOption {
   const current = result.convergence.runs.find((item) => item.run === run)
     ?? result.convergence.runs[0];
+  const points = current?.points ?? [];
+  const initialObjective = points[0]?.objective;
+  const relativeValues = points.map((point) => (
+    initialObjective === undefined
+      ? null
+      : getConvergenceRelativeValue(point.objective, initialObjective)
+  ));
+  const seriesData = mode === 'relative'
+    ? relativeValues
+    : points.map((point) => (mode === 'log' && point.objective <= 0 ? null : point.objective));
+  const axisName = mode === 'relative'
+    ? '相对初始值'
+    : mode === 'log'
+      ? '目标函数（对数）'
+      : '目标函数';
 
   return {
     animationDuration: 240,
     animationDurationUpdate: 220,
     tooltip: {
       trigger: 'axis',
-      valueFormatter: (value: unknown) => formatNumber(Number(value), 5),
+      confine: true,
+      borderWidth: 0,
+      padding: [9, 11],
+      formatter: (params) => {
+        const item = Array.isArray(params) ? params[0] : params;
+        const dataIndex = Number(item?.dataIndex ?? 0);
+        const point = points[dataIndex];
+        if (!point) return '暂无迭代数据';
+        const relativeValue = relativeValues[dataIndex];
+        const displayedValue = mode === 'relative'
+          ? `${formatNumber(relativeValue, 4)}%`
+          : formatNumber(point.objective, 5);
+        const modeLabel = mode === 'relative' ? '相对初始值' : mode === 'log' ? '对数轴目标' : '目标函数';
+
+        return [
+          `<strong>第 ${point.iteration} 次迭代</strong>`,
+          `${modeLabel}：${displayedValue}`,
+          mode === 'relative' ? `原始目标：${formatNumber(point.objective, 5)}` : `相对初始：${formatNumber(relativeValue, 4)}%`,
+          `本轮变化：${point.relativeChange == null ? '—' : `${formatNumber(point.relativeChange * 100, 4)}%`}`,
+        ].join('<br/>');
+      },
     },
     grid: { top: 40, right: 18, bottom: 32, left: 72 },
     xAxis: {
       type: 'category',
-      data: current?.points.map((point) => String(point.iteration)) ?? [],
+      name: '迭代次数',
+      nameLocation: 'middle',
+      nameGap: 24,
+      data: points.map((point) => String(point.iteration)),
       axisTick: { show: false },
       axisLabel: { color: '#59677d' },
     },
     yAxis: {
-      type: 'value',
-      name: '目标函数',
+      type: mode === 'log' ? 'log' : 'value',
+      logBase: 10,
+      scale: mode === 'log',
+      name: axisName,
       nameLocation: 'end',
       nameGap: 10,
       nameTextStyle: {
@@ -229,7 +281,9 @@ export function buildConvergenceOption(result: AnalysisResult, run: number): ECh
       },
       axisLabel: {
         color: '#59677d',
-        formatter: (value: number) => (value === 0 ? '0' : value.toExponential(1)),
+        formatter: mode === 'relative'
+          ? (value: number) => `${formatNumber(value, 1)}%`
+          : (value: number) => (value === 0 ? '0' : value.toExponential(1)),
       },
       splitLine: { lineStyle: { color: '#e4eaf0' } },
     },
@@ -238,10 +292,20 @@ export function buildConvergenceOption(result: AnalysisResult, run: number): ECh
         type: 'line',
         smooth: true,
         symbolSize: 6,
-        data: current?.points.map((point) => point.objective) ?? [],
+        data: seriesData,
         lineStyle: { color: '#227e71', width: 3 },
         itemStyle: { color: '#227e71' },
         areaStyle: { color: 'rgba(34, 126, 113, 0.12)' },
+        emphasis: { focus: 'series', scale: 1.35 },
+        ...(mode === 'relative' ? {
+          markLine: {
+            silent: true,
+            symbol: 'none',
+            lineStyle: { color: '#91a0b1', type: 'dashed', width: 1 },
+            label: { show: true, formatter: '初始基线', color: '#68798c', fontSize: 9 },
+            data: [{ yAxis: 100 }],
+          },
+        } : {}),
       },
     ],
   };
@@ -344,6 +408,140 @@ export function buildMetricRunsOption(result: AnalysisResult): EChartsOption {
       lineStyle: { width: 2 },
       emphasis: { focus: 'series' },
     })),
+  };
+}
+
+export type EvaluationMetricKey = 'acc' | 'nmi' | 'ari' | 'f1';
+export type EvaluationTrendMode = 'absolute' | 'relative';
+
+const evaluationMetricLabels: Record<EvaluationMetricKey, string> = {
+  acc: 'ACC',
+  nmi: 'NMI',
+  ari: 'ARI',
+  f1: 'F1-score',
+};
+
+const evaluationMetricColors: Record<EvaluationMetricKey, string> = {
+  acc: '#23865f',
+  nmi: '#2f7de1',
+  ari: '#14796f',
+  f1: '#59677d',
+};
+
+export function buildEvaluationTrendOption(
+  result: AnalysisResult,
+  metric: EvaluationMetricKey = 'acc',
+  mode: EvaluationTrendMode = 'absolute',
+): EChartsOption {
+  const reduceMotion = typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const label = evaluationMetricLabels[metric];
+  const color = evaluationMetricColors[metric];
+  const rows = result.metrics.runs;
+  const values = rows
+    .map((row) => Number(row[metric]) * 100)
+    .filter((value) => Number.isFinite(value));
+  const aggregate = result.metrics.aggregate[metric];
+  const aggregateMean = Number(aggregate.mean) * 100;
+  const displayedValues = mode === 'relative'
+    ? values.map((value) => value - aggregateMean)
+    : values;
+  const minimum = displayedValues.length ? Math.min(...displayedValues) : mode === 'relative' ? -1 : 0;
+  const maximum = displayedValues.length ? Math.max(...displayedValues) : mode === 'relative' ? 1 : 100;
+  const spread = Math.max(maximum - minimum, 1);
+  const padding = Math.max(spread * 0.3, 0.8);
+  const axisMin = mode === 'relative'
+    ? Math.floor((minimum - padding) * 10) / 10
+    : Math.max(0, Math.floor((minimum - padding) * 10) / 10);
+  const axisMax = mode === 'relative'
+    ? Math.ceil((maximum + padding) * 10) / 10
+    : Math.min(100, Math.ceil((maximum + padding) * 10) / 10);
+  const markLineValue = mode === 'relative' ? 0 : aggregateMean;
+
+  return {
+    animation: !reduceMotion,
+    animationDuration: reduceMotion ? 0 : 220,
+    animationDurationUpdate: reduceMotion ? 0 : 180,
+    tooltip: {
+      trigger: 'axis',
+      confine: true,
+      borderWidth: 0,
+      padding: [9, 11],
+      extraCssText: 'border-radius: 7px; box-shadow: 0 4px 10px rgba(35, 55, 78, 0.16);',
+      formatter: (params: any) => {
+        const item = Array.isArray(params) ? params[0] : params;
+        const index = Number(item?.dataIndex ?? 0);
+        const row = rows[index];
+        if (!row) return '暂无实验数据';
+        const value = Number(row[metric]) * 100;
+        const delta = Number.isFinite(aggregateMean) && Number.isFinite(value)
+          ? value - aggregateMean
+          : null;
+        return [
+          `<strong>第 ${row.run} 轮</strong>`,
+          `${label}：${Number.isFinite(value) ? value.toFixed(2) : '—'}%`,
+          `随机种子：${row.seed}`,
+          `相对均值：${delta === null ? '—' : `${delta >= 0 ? '+' : ''}${delta.toFixed(2)} 个百分点`}`,
+          `耗时：${Number.isFinite(row.runtimeSeconds) ? `${row.runtimeSeconds.toFixed(2)} s` : '—'}`,
+        ].join('<br/>');
+      },
+    },
+    grid: { top: 36, right: 22, bottom: 44, left: 58 },
+    xAxis: {
+      type: 'category',
+      name: '运行轮次',
+      nameLocation: 'middle',
+      nameGap: 28,
+      data: rows.map((row) => String(row.run)),
+      axisTick: { show: false },
+      axisLabel: { color: '#59677d' },
+    },
+    yAxis: {
+      type: 'value',
+      min: axisMin,
+      max: axisMax > axisMin ? axisMax : axisMin + 1,
+      name: mode === 'relative' ? '相对均值（百分点）' : `${label} (%)`,
+      nameLocation: 'end',
+      nameGap: 9,
+      nameTextStyle: { color: '#59677d', fontSize: 10, align: 'left' },
+      axisLabel: { color: '#59677d', formatter: mode === 'relative' ? '{value}' : '{value}%' },
+      splitLine: { lineStyle: { color: '#e4eaf0' } },
+    },
+    series: [
+      {
+        type: 'line',
+        name: label,
+        smooth: 0.22,
+        symbol: 'circle',
+        symbolSize: 7,
+        data: rows.map((row) => {
+          const value = Number(row[metric]) * 100;
+          if (!Number.isFinite(value)) return null;
+          const displayedValue = mode === 'relative' ? value - aggregateMean : value;
+          return Number(displayedValue.toFixed(4));
+        }),
+        lineStyle: { color, width: 3 },
+        itemStyle: { color, borderColor: '#ffffff', borderWidth: 2 },
+        areaStyle: { color: `${color}1c` },
+        emphasis: { focus: 'series', scale: 1.25 },
+        connectNulls: false,
+        markLine: Number.isFinite(markLineValue)
+          ? {
+              silent: true,
+              symbol: 'none',
+              lineStyle: { color: '#9aa8b7', type: 'dashed', width: 1 },
+              label: {
+                show: true,
+                formatter: mode === 'relative' ? '均值基线 0' : `均值 ${aggregateMean.toFixed(2)}%`,
+                color: '#68798c',
+                fontSize: 9,
+              },
+              data: [{ yAxis: Number(markLineValue.toFixed(4)) }],
+            }
+          : undefined,
+      },
+    ],
   };
 }
 
@@ -593,16 +791,14 @@ export function ConvergencePanel({
         actions={
           <div className="result-panel-actions">
             {result.convergence.runs.length ? (
-              <select
-                className="result-run-select"
-                value={current?.run ?? ''}
-                onChange={(event) => setRun(Number(event.target.value))}
-                aria-label="选择运行轮次"
-              >
-                {result.convergence.runs.map((item) => (
-                  <option key={item.run} value={item.run}>第 {item.run} 轮</option>
-                ))}
-              </select>
+              <SelectField
+                value={String(current?.run ?? '')}
+                options={result.convergence.runs.map((item) => ({ value: String(item.run), label: `第 ${item.run} 轮` }))}
+                onChange={(value) => setRun(Number(value))}
+                ariaLabel="选择运行轮次"
+                size="sm"
+                className="result-select-field result-chart-run-select-field"
+              />
             ) : null}
             {actions}
           </div>

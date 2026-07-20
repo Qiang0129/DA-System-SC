@@ -484,15 +484,11 @@ function Sidebar({
 
 function TopHeader({
   activeSection,
-  analysisContext,
-  backendStatus,
   currentUser,
   onToggleMobileNav,
   onLogout,
 }: {
   activeSection: string;
-  analysisContext: string;
-  backendStatus: BackendStatus;
   currentUser: AuthUser | null;
   onToggleMobileNav: () => void;
   onLogout: () => void;
@@ -520,20 +516,10 @@ function TopHeader({
       </div>
 
       <div className="navbar-right">
-        <div className="header-run-context" title="当前分析上下文">
-          <Database size={14} aria-hidden="true" />
-          <span>{analysisContext}</span>
-        </div>
-        <span
-          className={`header-service-state ${backendStatus}`}
-          title={backendStatus === 'online' ? 'Python 服务正常' : backendStatus === 'offline' ? 'Python 服务异常' : '正在检查 Python 服务'}
-          aria-label={backendStatus === 'online' ? 'Python 服务正常' : backendStatus === 'offline' ? 'Python 服务异常' : '正在检查 Python 服务'}
-        />
-        <div className="header-user" title={`当前用户：${username}`}>
+        <div className="header-user" title={`当前用户：${username}`} aria-label={`当前用户：${username}`}>
           <span className="header-user-avatar" aria-hidden="true">
             {username.slice(0, 1).toUpperCase()}
           </span>
-          <span>{username}</span>
         </div>
         <button
           type="button"
@@ -570,10 +556,6 @@ function StatusHeader({
           <span className="status-label">Python 服务</span>
           <strong>{statusText}</strong>
         </div>
-      </div>
-      <div className="status-meta">
-        <span>服务地址</span>
-        <strong>{API.replace(/\/api\/?$/, '')}</strong>
       </div>
       <div className="status-actions">
         <button type="button" className="btn btn-secondary" onClick={onImportData}>
@@ -1816,8 +1798,6 @@ function App() {
 
       <TopHeader
         activeSection={activeSection}
-        analysisContext={resultResource.envelope?.task ? `${resultResource.envelope.task.datasetName} · ${resultResource.envelope.task.mode}` : '尚未选择分析任务'}
-        backendStatus={backendStatus}
         currentUser={currentUser}
         onToggleMobileNav={() => setSidebarOpen((value) => !value)}
         onLogout={handleLogout}

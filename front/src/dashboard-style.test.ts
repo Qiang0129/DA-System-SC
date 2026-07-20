@@ -102,4 +102,12 @@ describe('dashboard shell styles', () => {
     expect(getProperty(densityRule, 'display')).toBe('inline-flex');
     expect(css).toContain('@keyframes task-toolbar-spin');
   });
+
+  it('keeps select menus scrollable while hiding the native scrollbar chrome', () => {
+    const selectMenuRule = getRule('.select-field-menu');
+
+    expect(getProperty(selectMenuRule, 'overflow-y')).toBe('auto');
+    expect(getProperty(selectMenuRule, 'scrollbar-width')).toBe('none');
+    expect(css).toContain('.select-field-menu::-webkit-scrollbar');
+  });
 });

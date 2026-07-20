@@ -403,6 +403,20 @@ describe('dashboard homepage', () => {
     renderApp();
     await signInFromLanding();
 
+    const topHeader = document.querySelector('.main-header');
+    if (!(topHeader instanceof HTMLElement)) {
+      throw new Error('未找到顶部栏');
+    }
+    const headerUser = topHeader.querySelector('.header-user');
+    expect(topHeader.querySelector('.header-run-context')).not.toBeInTheDocument();
+    expect(topHeader.querySelector('.header-service-state')).not.toBeInTheDocument();
+    expect(headerUser).toHaveAttribute('aria-label', `当前用户：${authBody.user.username}`);
+    expect(headerUser?.querySelectorAll('.header-user-avatar')).toHaveLength(1);
+    expect(headerUser?.children).toHaveLength(1);
+
+    const connectionStatus = screen.getByRole('region', { name: '系统连接状态' });
+    expect(within(connectionStatus).queryByText('服务地址')).not.toBeInTheDocument();
+
     expect(screen.getByRole('region', { name: '重复实验指标' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'CA 协关联矩阵' })).toBeInTheDocument();
     expect(screen.getAllByText('71.23%').length).toBeGreaterThan(0);
@@ -429,15 +443,20 @@ describe('dashboard homepage', () => {
 
     await screen.findByRole('heading', { name: '分析工作台', level: 1 });
     const runSelect = screen.getByRole('combobox', { name: '选择运行轮次' });
-    expect(runSelect).toHaveValue('6');
+    expect(runSelect).toHaveTextContent('第 6 轮');
 
-    await user.selectOptions(runSelect, '1');
+    await user.click(runSelect);
+    await user.click(screen.getByRole('option', { name: '第 1 轮' }));
     expect(screen.getByText('最终目标函数 5.00000')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /查看全部/ }));
     await screen.findByRole('heading', { name: '性能评估', level: 1 });
     expect(window.location.pathname).toBe('/workbench/evaluation');
     expect(window.location.search).toBe('?taskId=3');
+
+    await user.click(screen.getByRole('button', { name: '返回' }));
+    await screen.findByRole('heading', { name: '分析工作台', level: 1 });
+    expect(window.location.pathname).toBe('/workbench/analysis');
   });
 
   it('renders complete result detail pages from the selected task', async () => {
@@ -460,6 +479,7 @@ describe('dashboard homepage', () => {
       expect(screen.getByRole('heading', { name: sectionTitle })).toBeInTheDocument();
       expect(screen.getAllByText(/verification_dataset/).length).toBeGreaterThan(0);
       expect(window.location.search).toBe('?taskId=3');
+      expect(screen.getByRole('button', { name: '返回' })).toBeInTheDocument();
 
       if (path.startsWith('/workbench/ca-matrix')) {
         const formula = screen.getByLabelText('CA 等于 M 乘 M 转置除以基础聚类数量');
@@ -496,6 +516,52 @@ describe('dashboard homepage', () => {
     }
   });
 
+  it('renders the performance review workspace and synchronizes the focused metric', async () => {
+    localStorage.setItem('soft_web_access_token', 'access-token');
+    mockAuthApi();
+    const user = userEvent.setup();
+    renderApp('/workbench/evaluation?taskId=3');
+
+    await screen.findByRole('heading', { name: '性能评估', level: 1 });
+    expect(screen.getByRole('region', { name: '评估结论' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '指标趋势' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '稳定性诊断' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '指标分布' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '评估口径' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '导出 CSV' })).toBeEnabled();
+
+    const table = screen.getByRole('table', { name: '重复实验明细表' });
+    expect(within(table).getAllByRole('row')).toHaveLength(7);
+    expect(within(table).getByText('最高 ACC')).toBeInTheDocument();
+    expect(within(table).getByText('代表轮次')).toBeInTheDocument();
+
+    const metricSelect = screen.getByRole('combobox', { name: '突出评估指标' });
+    await user.click(metricSelect);
+    await user.click(screen.getByRole('option', { name: 'NMI' }));
+
+    expect(metricSelect).toHaveTextContent('NMI');
+    expect(screen.getByLabelText('NMI跨轮次变化趋势')).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', { name: 'NMI' })).toHaveClass('is-focused');
+    expect(within(table).getByText('最高 NMI')).toBeInTheDocument();
+
+    const relativeButton = screen.getByRole('button', { name: '相对均值' });
+    await user.click(relativeButton);
+    expect(relativeButton).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('NMI相对均值变化趋势')).toBeInTheDocument();
+    expect(screen.getByText(/以指标均值为 0 基线显示百分点变化/)).toBeInTheDocument();
+  });
+
+  it('keeps the evaluation context visible when repeated runs are unavailable', async () => {
+    localStorage.setItem('soft_web_access_token', 'access-token');
+    mockAuthApi(createTaskResultEnvelope({ emptyDetails: true }));
+    renderApp('/workbench/evaluation?taskId=3');
+
+    await screen.findByRole('heading', { name: '性能评估', level: 1 });
+    expect(screen.getByText('当前结果没有重复实验明细')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '评估口径' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '导出 CSV' })).toBeDisabled();
+  });
+
   it('keeps the matrix color scale outside the chart with real bounds', async () => {
     localStorage.setItem('soft_web_access_token', 'access-token');
     mockAuthApi();
@@ -515,11 +581,12 @@ describe('dashboard homepage', () => {
     const countSelect = screen.getByRole('combobox', { name: '选择高协关联样本对显示数量' });
     const ranking = screen.getByRole('table', { name: '高协关联样本对排名' });
 
-    expect(countSelect).toHaveValue('10');
+    expect(countSelect).toHaveTextContent('Top 10');
     expect(within(ranking).getAllByRole('row')).toHaveLength(11);
     expect(within(ranking).getAllByRole('row')[1]).toHaveTextContent('S2');
 
-    await user.selectOptions(countSelect, '5');
+    await user.click(countSelect);
+    await user.click(screen.getByRole('option', { name: 'Top 5' }));
     expect(within(ranking).getAllByRole('row')).toHaveLength(6);
     expect(screen.getByText('忽略对角线后按 CA 数值降序展示，当前显示 5 / 20 组')).toBeInTheDocument();
   });
@@ -554,12 +621,20 @@ describe('dashboard homepage', () => {
 
     await screen.findByRole('heading', { name: '多核相似性学习', level: 1 });
     const runSelect = screen.getByRole('combobox', { name: '选择求解轮次' });
-    expect(runSelect).toHaveValue('6');
+    expect(runSelect).toHaveTextContent('第 6 轮');
     expect(screen.getByLabelText('本轮求解诊断')).toHaveTextContent('3.50000');
 
-    await user.selectOptions(runSelect, '1');
+    await user.click(runSelect);
+    await user.click(screen.getByRole('option', { name: '第 1 轮' }));
     expect(screen.getByLabelText('本轮求解诊断')).toHaveTextContent('5.00000');
     expect(screen.getByRole('table', { name: '迭代目标函数明细' })).toHaveTextContent('第 2 次');
+    expect(screen.getByRole('region', { name: '求解结论' })).toHaveTextContent('目标下降');
+    expect(screen.getByRole('table', { name: '多轮运行对比表' })).toHaveTextContent('当前代表');
+
+    const relativeButton = screen.getByRole('button', { name: '相对目标' });
+    expect(relativeButton).toHaveAttribute('aria-pressed', 'false');
+    await user.click(relativeButton);
+    expect(relativeButton).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('switches result visualizations and keeps the task context on the professional page', async () => {
