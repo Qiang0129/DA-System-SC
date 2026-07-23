@@ -4819,8 +4819,9 @@
   min-width: 0;
   min-height: 286px;
   display: grid;
-  align-content: center;
-  gap: 22px;
+  grid-template-rows: auto minmax(120px, 1fr) auto;
+  align-content: stretch;
+  gap: 18px;
   padding: 24px 28px;
   border-left: 1px solid #dfe6ed;
   background: #ffffff;
@@ -4861,7 +4862,9 @@
 }
 
 .result-kernel-definition .result-kernel-formula {
-  min-height: 104px;
+  min-height: 120px;
+  align-self: center;
+  justify-self: stretch;
   padding-block: 12px;
 }
 
