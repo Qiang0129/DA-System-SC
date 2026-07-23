@@ -23,7 +23,6 @@ import {
   WorkbenchNotice,
   WorkbenchPageHeader,
   WorkbenchSectionHeader,
-  WorkbenchStatus,
 } from '../WorkbenchUi';
 import {
   ConvergencePanel,
@@ -73,7 +72,7 @@ export function AnalysisOverviewPage({ resource }: { resource: TaskResultResourc
     },
     {
       label: '核函数',
-      detail: `${result.kernelWeights.items.length} 个真实核`,
+      detail: `${result.kernelWeights.items.length} 个核函数`,
       status: result.kernelWeights.items.length ? '已计算' : '无权重',
       complete: result.kernelWeights.items.length > 0,
       section: 'kernel-config',
@@ -153,7 +152,6 @@ export function AnalysisOverviewPage({ resource }: { resource: TaskResultResourc
         icon={LayoutDashboard}
         title="分析工作台"
         context={`任务 #${task.id} · ${task.datasetName} · ${task.mode} · 第 ${summary.representativeRun} 轮代表结果`}
-        status={<WorkbenchStatus tone="success">真实结果</WorkbenchStatus>}
         actions={
           <button type="button" className="btn btn-secondary" onClick={resource.refresh}>
             <RefreshCw size={15} aria-hidden="true" />
@@ -295,7 +293,7 @@ export function AnalysisOverviewPage({ resource }: { resource: TaskResultResourc
         <section className="panel analysis-overview-runs" aria-label="重复实验明细">
           <WorkbenchSectionHeader
             title="最近五轮实验"
-            meta={`共 ${result.metrics.runs.length} 轮真实运行，按轮次倒序展示`}
+            meta={`共 ${result.metrics.runs.length} 轮运行，按轮次倒序展示`}
             actions={
               <button
                 type="button"

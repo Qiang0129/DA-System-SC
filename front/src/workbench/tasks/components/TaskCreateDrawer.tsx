@@ -106,7 +106,7 @@ export function TaskCreateDrawer({
       return false;
     }
     if (selectedDataset?.hasLabels === false || (selectedDataset?.classCount ?? 0) < 2) {
-      setError('真实 OMELET 分析需要包含至少两个类别的 y 标签');
+      setError('OMELET 分析需要包含至少两个类别的 y 标签');
       return false;
     }
     return true;

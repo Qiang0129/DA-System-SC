@@ -29,7 +29,7 @@ export function saveTaskLocalMeta(meta: TaskLocalMetaMap) {
   try {
     window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(meta));
   } catch {
-    // 本地辅助信息写入失败时不影响真实任务操作。
+    // 本地辅助信息写入失败时不影响任务操作。
   }
 }
 

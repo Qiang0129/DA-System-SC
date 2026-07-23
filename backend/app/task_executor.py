@@ -148,7 +148,7 @@ class TaskExecutionManager:
             if dataset is None or not Path(dataset.storage_path).is_file():
                 task.status = "failed"
                 task.failure_reason = "dataset_missing"
-                task.error_message = "任务数据集文件不存在，无法执行真实分析"
+                task.error_message = "任务数据集文件不存在，无法执行分析"
                 task.finished_at = _now()
                 session.add(
                     OperationLog(
@@ -176,7 +176,7 @@ class TaskExecutionManager:
                     user_id=task.user_id,
                     task_id=task.id,
                     action="task_started",
-                    message="真实 OMELET 子进程已启动",
+                    message="OMELET 子进程已启动",
                     detail_json=_dump_json({"mode": task.mode, "datasetId": task.dataset_id}),
                 ),
             )
@@ -367,7 +367,7 @@ class TaskExecutionManager:
                     user_id=task.user_id,
                     task_id=task.id,
                     action="task_succeeded",
-                    message="真实 OMELET 分析完成，结果已持久化",
+                    message="OMELET 分析完成，结果已持久化",
                     detail_json=_dump_json({
                         "runtimeSeconds": result.runtime_seconds,
                         "metrics": manifest["metrics"].get("aggregate", {}),

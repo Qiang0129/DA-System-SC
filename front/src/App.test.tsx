@@ -44,7 +44,7 @@ function createTaskResultEnvelope({ emptyDetails = false }: { emptyDetails?: boo
     state: 'ready',
     task: {
       id: 3,
-      name: '真实结果验证任务',
+      name: '结果验证任务',
       mode: 'OMELET-SV',
       status: 'succeeded',
       progress: 100,
@@ -259,7 +259,7 @@ function mockAuthApi(resultEnvelope = createTaskResultEnvelope()) {
 
     if (url.endsWith('/api/tasks/3/logs')) {
       return createResponse({
-        items: [{ id: 1, action: 'task_succeeded', level: 'info', message: '真实算法执行完成', createdAt: '2026-07-16 19:10:02' }],
+        items: [{ id: 1, action: 'task_succeeded', level: 'info', message: '算法执行完成', createdAt: '2026-07-16 19:10:02' }],
         total: 1,
       });
     }
@@ -420,7 +420,7 @@ describe('dashboard homepage', () => {
     expect(screen.getByRole('region', { name: '重复实验指标' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'CA 协关联矩阵' })).toBeInTheDocument();
     expect(screen.getAllByText('71.23%').length).toBeGreaterThan(0);
-    expect(screen.getByText('真实结果')).toBeInTheDocument();
+    expect(screen.queryByText('真实结果')).not.toBeInTheDocument();
     expect(screen.getAllByText(/verification_dataset/).length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: '分析链路' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '最近五轮实验' })).toBeInTheDocument();

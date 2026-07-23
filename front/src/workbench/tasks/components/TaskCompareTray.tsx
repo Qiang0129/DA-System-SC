@@ -57,7 +57,7 @@ export function TaskCompareTray({ tasks, onRemove, onClear }: Props) {
 
       <p className="task-compare-note">
         <BarChart3 size={15} aria-hidden="true" />
-        仅比较当前已加载任务的任务元数据和已有指标；真实图表与结果文件将在算法服务接入后显示。
+        仅比较当前已加载任务的任务元数据和已有指标；图表与结果文件将在算法服务接入后显示。
       </p>
     </section>
   );

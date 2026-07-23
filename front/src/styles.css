@@ -843,16 +843,6 @@ p {
   background: var(--app-accent-soft);
 }
 
-.demo-data-notice {
-  padding: 10px 14px;
-  border: 1px solid var(--warning-border);
-  border-radius: var(--panel-radius);
-  background: var(--warning-bg);
-  color: var(--amber-text);
-  font-size: 13px;
-  font-weight: 700;
-}
-
 .panel-header span {
   color: var(--app-text-muted);
   font-size: 13px;

@@ -4,7 +4,6 @@ import { ArrowLeft, Boxes, ClipboardCheck, Network, RefreshCw, Target, type Luci
 import {
   WorkbenchMetricStrip,
   WorkbenchPageHeader,
-  WorkbenchStatus,
 } from '../WorkbenchUi';
 import { formatPercent, metricLabels, type MetricKey } from './resultPresentation';
 import type { AnalysisResult, TaskResultResource } from './types';
@@ -28,7 +27,6 @@ export function ReadyHeader({
       icon={icon}
       title={title}
       context={`任务 #${task.id} · ${task.datasetName} · ${task.mode} · 第 ${result.preview.summary.representativeRun} 轮代表结果`}
-      status={<WorkbenchStatus tone="success">真实结果</WorkbenchStatus>}
       backAction={<ResultBackButton taskId={task.id} />}
       actions={
         actions ?? (

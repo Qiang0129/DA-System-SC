@@ -984,9 +984,6 @@ function AnalysisWorkbenchPage({
 }) {
   return (
     <>
-      <section className="demo-data-notice" aria-label="示例数据提示">
-        当前工作台展示的是示例分析数据；真实上传的数据集请在“数据管理”中查看。
-      </section>
       <section className="summary-grid" aria-label="分析概览">
         {summaryCards.map((card) => (
           <SummaryCard key={card.label} card={card} />

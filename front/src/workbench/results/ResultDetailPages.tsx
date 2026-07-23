@@ -133,7 +133,7 @@ type ReportSection = 'summary' | 'metrics' | 'parameters' | 'runs' | 'artifacts'
 const reportSectionOptions: Array<{ key: ReportSection; label: string; detail: string }> = [
   { key: 'summary', label: '任务摘要', detail: '数据集、算法、样本和耗时' },
   { key: 'metrics', label: '性能指标', detail: '均值、标准差与取值范围' },
-  { key: 'parameters', label: '算法参数', detail: '本次执行的真实参数' },
+  { key: 'parameters', label: '算法参数', detail: '本次执行参数' },
   { key: 'runs', label: '重复实验', detail: '逐轮指标和随机种子' },
   { key: 'artifacts', label: '结果产物', detail: '文件格式与大小清单' },
 ];
@@ -226,7 +226,7 @@ export function CaResultPage({ resource }: { resource: TaskResultResource }) {
         <section className="panel result-diagnostic-panel" aria-label="矩阵诊断">
           <WorkbenchSectionHeader
             title="矩阵诊断"
-            meta="基于持久化矩阵预览的真实统计"
+            meta="基于持久化矩阵预览的统计"
             actions={<WorkbenchStatus tone={status.tone}>{status.label}</WorkbenchStatus>}
           />
           <dl className="result-diagnostic-list">
@@ -320,7 +320,7 @@ export function KernelResultPage({ resource }: { resource: TaskResultResource })
     <section className="soft-page result-detail-page result-kernel-page">
       <ReadyHeader title="核函数配置" icon={SlidersHorizontal} resource={resource} />
       <section className="panel result-kernel-workbench">
-        <WorkbenchSectionHeader title="核函数工作区" meta="选择核函数，核对公式、真实权重与本次任务参数" />
+        <WorkbenchSectionHeader title="核函数工作区" meta="选择核函数，核对公式、权重与本次任务参数" />
         <div className="result-kernel-workspace-body">
           <nav className="result-kernel-catalog" role="tablist" aria-label="选择核函数">
             <span>可用核函数</span>
@@ -369,7 +369,7 @@ export function KernelResultPage({ resource }: { resource: TaskResultResource })
           title="跨轮核权重稳定性"
           meta={trendMode === 'relative'
             ? `${result.kernelWeights.runs.length} 轮数据，以各核自身均值为基线放大波动`
-            : `${result.kernelWeights.runs.length} 轮真实 alpha，保留原始权重尺度`}
+            : `${result.kernelWeights.runs.length} 轮 alpha，保留原始权重尺度`}
           actions={(
             <div className="result-kernel-stability-actions">
               <div className="result-kernel-trend-toggle" role="group" aria-label="切换核权重趋势视图">
@@ -676,7 +676,7 @@ export function VisualizationResultPage({ resource }: { resource: TaskResultReso
           ) : null}
         </section>
         <aside className="panel result-visual-toolbox" aria-label="结果视图工具箱">
-          <WorkbenchSectionHeader title="结果视图" meta="切换当前任务的真实结果图" />
+          <WorkbenchSectionHeader title="结果视图" meta="切换当前任务的结果图" />
           <div className="result-visualization-list">
             {options.map((item) => {
               const Icon = item.icon;
@@ -755,7 +755,7 @@ export function ResultsAnalysisPage({ resource }: { resource: TaskResultResource
         <div className="result-analysis-trend">
           <OptionChartPanel
             title="重复实验指标趋势"
-            meta={`${runs.length} 轮真实运行，统一按百分比展示`}
+            meta={`${runs.length} 轮运行，统一按百分比展示`}
             option={metricTrend}
             hasData={runs.length > 0}
             emptyTitle="暂无指标趋势"
@@ -975,7 +975,7 @@ export function ReportResultPage({ resource }: { resource: TaskResultResource })
         label="报告摘要"
         metrics={[
           { label: '已选章节', value: `${sections.length} / ${reportSectionOptions.length}`, note: '控制预览和导出内容', icon: ListChecks, tone: 'blue' },
-          { label: '重复实验', value: `${result.metrics.runs.length} 轮`, note: '真实运行明细', icon: Activity, tone: 'teal' },
+          { label: '重复实验', value: `${result.metrics.runs.length} 轮`, note: '运行明细', icon: Activity, tone: 'teal' },
           { label: '算法参数', value: `${parameters.length} 项`, note: '来自任务持久化结果', icon: SlidersHorizontal, tone: 'neutral' },
           { label: '结果产物', value: `${result.artifacts.length} 项`, note: '纳入交付清单', icon: Archive, tone: 'green' },
         ]}

@@ -81,12 +81,12 @@ function ResultState({ resource }: { resource: TaskResultResource }) {
     tone = 'error';
   }
   if (state === 'empty') {
-    title = '还没有可用的真实结果';
+    title = '还没有可用的分析结果';
     detail = '请先创建并完成一个带 y 标签的数据集分析任务。';
   }
   if (state === 'draft') {
     title = '任务尚未启动';
-    detail = '启动任务后，这里会显示真实的计算过程和结果。';
+    detail = '启动任务后，这里会显示计算过程和结果。';
   }
   if (state === 'queued') {
     title = '任务正在排队';
@@ -95,7 +95,7 @@ function ResultState({ resource }: { resource: TaskResultResource }) {
   }
   if (state === 'running' && task) {
     const run = getTaskRunProgress(task);
-    title = '真实 OMELET 正在运行';
+    title = 'OMELET 正在运行';
     detail = `第 ${run.current}/${run.total} 轮，迭代 ${task.currentIter ?? 0}/${task.maxIter ?? 0}，${Math.round(task.progress ?? 0)}%。`;
     tone = 'warning';
   }
@@ -111,7 +111,7 @@ function ResultState({ resource }: { resource: TaskResultResource }) {
   }
   if (state === 'legacy') {
     title = '这是旧版演示结果';
-    detail = '旧结果没有真实算法产物，重新执行任务后才能查看可信分析。';
+    detail = '旧结果缺少算法产物，重新执行任务后才能查看可信分析。';
     tone = 'warning';
   }
 
@@ -210,7 +210,7 @@ function EvaluationPage({ resource }: { resource: TaskResultResource }) {
           <section className="panel result-evaluation-conclusion" aria-label="评估结论">
             <WorkbenchSectionHeader
               title="评估结论"
-              meta="基于当前重复实验的真实汇总结果，未引入外部方法基线"
+              meta="基于当前重复实验的汇总结果，未引入外部方法基线"
               actions={<WorkbenchStatus tone={overallTone}>{overallLabel}</WorkbenchStatus>}
             />
             <div className="result-evaluation-conclusion-body">
@@ -257,8 +257,8 @@ function EvaluationPage({ resource }: { resource: TaskResultResource }) {
               <WorkbenchSectionHeader
                 title="指标趋势"
                 meta={trendMode === 'relative'
-                  ? `${summary.runCount} 个真实观测点 · 以指标均值为 0 基线显示百分点变化`
-                  : `${summary.runCount} 个真实观测点 · 纵轴按 ${metricLabels[focusMetric]} 区间自动缩放`}
+                  ? `${summary.runCount} 个观测点 · 以指标均值为 0 基线显示百分点变化`
+                  : `${summary.runCount} 个观测点 · 纵轴按 ${metricLabels[focusMetric]} 区间自动缩放`}
                 actions={
                   <div className="result-evaluation-trend-controls">
                     <div className="result-evaluation-trend-mode" role="group" aria-label="趋势显示方式">
@@ -378,7 +378,7 @@ function EvaluationPage({ resource }: { resource: TaskResultResource }) {
           <section className="panel result-evaluation-table-panel" aria-label="重复实验明细">
             <WorkbenchSectionHeader
               title="重复实验明细"
-              meta={`${rows.length} 次真实运行 · 当前突出 ${metricLabels[focusMetric]} · 随机种子按任务参数派生`}
+              meta={`${rows.length} 次运行 · 当前突出 ${metricLabels[focusMetric]} · 随机种子按任务参数派生`}
               actions={<WorkbenchStatus tone="info">完整记录</WorkbenchStatus>}
             />
             <div className="result-evaluation-table" role="table" aria-label="重复实验明细表">

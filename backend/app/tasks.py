@@ -157,7 +157,7 @@ def _ensure_taskable(session: Session, dataset: Dataset) -> None:
     if quality and quality.status == "error":
         raise HTTPException(422, "数据集质量检查未通过，无法创建或启动任务")
     if not dataset.has_ground_truth or not dataset.cluster_count or dataset.cluster_count < 2:
-        raise HTTPException(422, "真实 OMELET 分析需要包含至少两个类别的 y 标签")
+        raise HTTPException(422, "OMELET 分析需要包含至少两个类别的 y 标签")
 
 
 def _get_user_task(session: Session, task_id: int, user: User) -> AnalysisTask:
@@ -260,7 +260,7 @@ def _task_response(session: Session, task: AnalysisTask, dataset_name: str) -> A
 
 
 def _refresh_user_running_tasks(session: Session, user_id: int, task_ids: list[int] | None = None) -> None:
-    """真实执行器独立写入进度，保留旧调用点以兼容任务列表与统计接口。"""
+    """执行器独立写入进度，保留旧调用点以兼容任务列表与统计接口。"""
     return None
 
 
@@ -291,7 +291,7 @@ def _queue_task(session: Session, task: AnalysisTask, user: User) -> None:
         user_id=user.id,
         task_id=task.id,
         action="task_queued",
-        message="任务已进入真实执行队列",
+        message="任务已进入执行队列",
         detail={"mode": task.mode, "datasetId": task.dataset_id},
     )
 
@@ -672,7 +672,7 @@ def download_task_artifact(
     _get_user_task(session, task_id, user)
     result = session.scalar(select(TaskResult).where(TaskResult.task_id == task_id, TaskResult.schema_version == 1))
     if result is None:
-        raise HTTPException(404, "真实任务结果不存在")
+        raise HTTPException(404, "任务结果不存在")
     path = _safe_artifact_path(result, artifact_key)
     media_type = "text/csv; charset=utf-8" if path.suffix == ".csv" else "application/octet-stream"
     return FileResponse(path, media_type=media_type, filename=path.name)
@@ -720,7 +720,7 @@ def create_task_export(
     task = _get_user_task(session, task_id, user)
     result = session.scalar(select(TaskResult).where(TaskResult.task_id == task_id, TaskResult.schema_version == 1))
     if result is None:
-        raise HTTPException(409, "仅真实完成的任务可以导出")
+        raise HTTPException(409, "仅已完成的任务可以导出")
     allowed = {"metrics", "parameters", "result", "labels", "ca", "s", "z"}
     selected = list(dict.fromkeys(item.strip().lower() for item in payload.items if item.strip()))
     if not selected or any(item not in allowed for item in selected):
