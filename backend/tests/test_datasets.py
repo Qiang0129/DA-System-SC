@@ -42,6 +42,16 @@ def _register_and_headers(client: TestClient) -> dict[str, str]:
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
 
+def _upload_dataset(client: TestClient, headers: dict[str, str], filename: str, payload: bytes) -> dict:
+    response = client.post(
+        "/api/datasets",
+        headers=headers,
+        files={"file": (filename, payload, "application/octet-stream")},
+    )
+    assert response.status_code == 200
+    return response.json()
+
+
 def test_parse_mat_dataset_uses_uploaded_matrix_and_labels():
     client = TestClient(app)
     payload = _mat_file_payload(
@@ -223,6 +233,130 @@ def test_update_dataset_replaces_file_and_metadata(tmp_path, monkeypatch):
     assert listed["sampleCount"] == 4
     assert listed["baseCount"] == 3
     assert listed["hasLabels"] is False
+
+
+def test_append_dataset_adds_samples_and_keeps_identity(tmp_path, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "dataset_storage_dir", tmp_path)
+    client = _make_test_client()
+    headers = _register_and_headers(client)
+    first_payload = _mat_file_payload(
+        {
+            "E": np.array([[1, 1], [1, 2]]),
+            "y": np.array([[0], [1]]),
+        },
+    )
+    appended_payload = _mat_file_payload(
+        {
+            "E": np.array([[2, 2], [2, 3], [3, 3]]),
+            "y": np.array([[1], [2], [2]]),
+        },
+    )
+
+    uploaded = _upload_dataset(client, headers, "first_upload.mat", first_payload)
+    dataset_id = uploaded["id"]
+    old_files = list(tmp_path.rglob("*.mat"))
+    assert len(old_files) == 1
+
+    append_response = client.post(
+        f"/api/datasets/{dataset_id}/append",
+        headers=headers,
+        files={"file": ("new_samples.mat", appended_payload, "application/octet-stream")},
+    )
+
+    assert append_response.status_code == 200
+    appended = append_response.json()
+    assert appended["id"] == dataset_id
+    assert appended["name"] == "first_upload"
+    assert appended["sampleCount"] == 5
+    assert appended["baseCount"] == 2
+    assert appended["classCount"] == 3
+    assert appended["hasLabels"] is True
+    assert appended["version"] == 2
+
+    saved_files = list(tmp_path.rglob("*.mat"))
+    assert len(saved_files) == 2
+    appended_files = [path for path in saved_files if path not in old_files]
+    assert len(appended_files) == 1
+    merged_mat = sio.loadmat(appended_files[0])
+    assert merged_mat["E"].shape == (5, 2)
+    assert merged_mat["E"].tolist() == [[1, 1], [1, 2], [2, 2], [2, 3], [3, 3]]
+    assert merged_mat["y"].reshape(-1).tolist() == [0, 1, 1, 2, 2]
+
+    versions_response = client.get(f"/api/datasets/{dataset_id}/versions", headers=headers)
+    assert versions_response.status_code == 200
+    versions = versions_response.json()
+    assert [version["action"] for version in versions] == ["appended", "uploaded"]
+    assert [version["version"] for version in versions] == [2, 1]
+
+
+def test_append_dataset_rejects_incompatible_base_count(tmp_path, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "dataset_storage_dir", tmp_path)
+    client = _make_test_client()
+    headers = _register_and_headers(client)
+    uploaded = _upload_dataset(
+        client,
+        headers,
+        "base_dataset.mat",
+        _mat_file_payload({"E": np.array([[1, 1], [1, 2]])}),
+    )
+    mismatched_payload = _mat_file_payload({"E": np.array([[1, 2, 3]])})
+
+    response = client.post(
+        f"/api/datasets/{uploaded['id']}/append",
+        headers=headers,
+        files={"file": ("mismatched.mat", mismatched_payload, "application/octet-stream")},
+    )
+
+    assert response.status_code == 400
+    assert "列数必须与当前数据集一致" in response.json()["detail"]
+
+
+def test_append_dataset_rejects_label_state_mismatch(tmp_path, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "dataset_storage_dir", tmp_path)
+    client = _make_test_client()
+    headers = _register_and_headers(client)
+    uploaded = _upload_dataset(
+        client,
+        headers,
+        "labeled_dataset.mat",
+        _mat_file_payload({"E": np.array([[1, 1], [1, 2]]), "y": np.array([[0], [1]])}),
+    )
+    unlabeled_payload = _mat_file_payload({"E": np.array([[2, 2], [2, 3]])})
+
+    response = client.post(
+        f"/api/datasets/{uploaded['id']}/append",
+        headers=headers,
+        files={"file": ("unlabeled.mat", unlabeled_payload, "application/octet-stream")},
+    )
+
+    assert response.status_code == 400
+    assert "标签状态必须与当前数据集一致" in response.json()["detail"]
+
+
+def test_append_dataset_rejects_label_count_mismatch(tmp_path, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "dataset_storage_dir", tmp_path)
+    client = _make_test_client()
+    headers = _register_and_headers(client)
+    uploaded = _upload_dataset(
+        client,
+        headers,
+        "labeled_dataset.mat",
+        _mat_file_payload({"E": np.array([[1, 1], [1, 2]]), "y": np.array([[0], [1]])}),
+    )
+    bad_label_payload = _mat_file_payload({"E": np.array([[2, 2], [2, 3]]), "y": np.array([[2]])})
+
+    response = client.post(
+        f"/api/datasets/{uploaded['id']}/append",
+        headers=headers,
+        files={"file": ("bad_label.mat", bad_label_payload, "application/octet-stream")},
+    )
+
+    assert response.status_code == 400
+    assert "标签数量与样本数量不一致" in response.json()["detail"]
 
 
 def test_dataset_list_requires_login():

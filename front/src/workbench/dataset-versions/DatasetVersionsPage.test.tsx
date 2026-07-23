@@ -38,7 +38,7 @@ const revisions: DatasetRevision[] = [
   {
     id: 103,
     version: 3,
-    action: 'replaced',
+    action: 'appended',
     name: 'Material Revision Set',
     originalFilename: 'material-v3.mat',
     createdAt: '2026-07-14 10:30:00',
@@ -103,7 +103,7 @@ describe('DatasetVersionsPage', () => {
   it('compares the latest revision with its previous version by default', async () => {
     renderPage();
 
-    await screen.findByRole('heading', { name: 'v3 · 替换文件' });
+    await screen.findByRole('heading', { name: 'v3 · 追加数据' });
     const inspector = screen.getByRole('region', { name: '版本差异详情' });
     expect(within(inspector).getByText(/与 v2 相比，/)).toBeInTheDocument();
     expect(within(inspector).getByRole('combobox', { name: '选择比较基准' })).toHaveTextContent('v2 · 重命名');

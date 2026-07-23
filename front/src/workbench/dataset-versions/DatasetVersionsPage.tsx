@@ -3,6 +3,7 @@ import {
   ArrowRight,
   Database,
   FileClock,
+  FilePlus2,
   GitCompareArrows,
   History,
   PencilLine,
@@ -57,6 +58,11 @@ const ACTION_META: Record<string, RevisionActionMeta> = {
     label: '替换文件',
     description: '更新源文件，并记录替换后的结构与质量状态。',
     icon: Replace,
+  },
+  appended: {
+    label: '追加数据',
+    description: '向当前数据集追加样本，并记录合并后的结构与质量状态。',
+    icon: FilePlus2,
   },
   renamed: {
     label: '重命名',
@@ -320,7 +326,7 @@ export function DatasetVersionsPage() {
           </span>
           <div>
             <h1>数据版本记录</h1>
-            <p>按数据集查看上传、替换和重命名历史，并核对每次变更影响的元数据。</p>
+            <p>按数据集查看上传、追加、替换和重命名历史，并核对每次变更影响的元数据。</p>
           </div>
         </div>
         <button
@@ -399,7 +405,7 @@ export function DatasetVersionsPage() {
         <section className="versions-empty panel">
           <Database size={28} aria-hidden="true" />
           <h2>暂无可追踪的数据集</h2>
-          <p>上传数据集后，系统会自动保存初始版本，并持续记录替换和重命名操作。</p>
+          <p>上传数据集后，系统会自动保存初始版本，并持续记录追加、替换和重命名操作。</p>
           <button
             type="button"
             className="btn btn-primary"

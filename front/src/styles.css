@@ -1748,13 +1748,13 @@ p {
   outline-offset: 2px;
 }
 
-.dataset-list-action.update {
+.dataset-list-action.append {
   border-color: rgba(64, 158, 255, 0.24);
   background: rgba(64, 158, 255, 0.12);
   color: var(--app-accent-dark);
 }
 
-.dataset-list-action.update:hover:not(:disabled) {
+.dataset-list-action.append:hover:not(:disabled) {
   border-color: rgba(64, 158, 255, 0.42);
   background: rgba(64, 158, 255, 0.2);
 }

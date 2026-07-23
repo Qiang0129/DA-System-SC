@@ -131,25 +131,22 @@ def _dataset_name(filename: str) -> str:
     return (Path(filename).stem or "未命名数据集")[:128]
 
 
-def _parse_mat_content(filename: str, content: bytes) -> dict:
+def _load_mat_content(filename: str, content: bytes) -> dict:
     if not filename.lower().endswith(".mat"):
         raise HTTPException(400, f"不支持的文件格式: {filename}，目前仅支持 .mat")
 
     try:
-        mat = sio.loadmat(io.BytesIO(content))
+        return sio.loadmat(io.BytesIO(content))
     except Exception as exc:
         raise HTTPException(400, f"无法解析 .mat 文件: {exc}") from exc
 
-    variables = {}
-    for name, value in mat.items():
-        if name.startswith("__"):
-            continue
-        variables[name] = {
-            "shape": _variable_shape(value),
-            "dtype": str(value.dtype),
-        }
 
-    # 主变量通常是 E；缺少 E 时，取面积最大的二维矩阵作为基础聚类矩阵。
+def _visible_mat_variables(mat: dict) -> dict:
+    return {name: value for name, value in mat.items() if not name.startswith("__")}
+
+
+def _find_main_variable(mat: dict, variables: dict) -> tuple[str | None, list[int]]:
+    # 默认优先使用 E；没有 E 时，使用面积最大的二维矩阵作为基础聚类矩阵。
     main_var = None
     main_shape = [0, 0]
     if "E" in mat and len(_variable_shape(mat["E"])) >= 2:
@@ -164,6 +161,18 @@ def _parse_mat_content(filename: str, content: bytes) -> dict:
             main_var = name
             main_shape = shape
 
+    return main_var, main_shape
+
+
+def _parse_loaded_mat(filename: str, mat: dict) -> dict:
+    variables = {}
+    for name, value in _visible_mat_variables(mat).items():
+        variables[name] = {
+            "shape": _variable_shape(value),
+            "dtype": str(value.dtype),
+        }
+
+    main_var, main_shape = _find_main_variable(mat, variables)
     label_var, label_values = _find_label_variable(mat)
     label_distribution = _build_label_distribution(label_values) if label_values is not None else []
     has_labels = len(label_distribution) > 0
@@ -185,6 +194,10 @@ def _parse_mat_content(filename: str, content: bytes) -> dict:
         "labelDistribution": label_distribution,
         "clusterStats": _build_cluster_stats(main_matrix) if main_matrix is not None else [],
     }
+
+
+def _parse_mat_content(filename: str, content: bytes) -> dict:
+    return _parse_loaded_mat(filename, _load_mat_content(filename, content))
 
 
 def _build_quality_summary(parsed: dict) -> tuple[str, list[str]]:
@@ -362,6 +375,79 @@ def _save_dataset_upload(user_id: int, filename: str, content: bytes) -> tuple[d
     return parsed, file_hash, storage_path
 
 
+def _raw_label_values(value) -> np.ndarray:
+    return np.asarray(value).squeeze().reshape(-1)
+
+
+def _merge_label_values(current_value, incoming_value) -> np.ndarray:
+    current_labels = _raw_label_values(current_value)
+    incoming_labels = _raw_label_values(incoming_value)
+    combined_labels = np.concatenate([current_labels, incoming_labels], axis=0)
+
+    current_array = np.asarray(current_value)
+    if current_array.ndim == 2 and current_array.shape[1] == 1:
+        return combined_labels.reshape(-1, 1)
+    if current_array.ndim == 2 and current_array.shape[0] == 1:
+        return combined_labels.reshape(1, -1)
+    return combined_labels
+
+
+def _build_appended_mat_content(
+    current_filename: str,
+    current_content: bytes,
+    incoming_filename: str,
+    incoming_content: bytes,
+) -> bytes:
+    current_mat = _load_mat_content(current_filename, current_content)
+    incoming_mat = _load_mat_content(incoming_filename, incoming_content)
+    current_parsed = _parse_loaded_mat(current_filename, current_mat)
+    incoming_parsed = _parse_loaded_mat(incoming_filename, incoming_mat)
+
+    current_main_var = current_parsed.get("mainVariable")
+    incoming_main_var = incoming_parsed.get("mainVariable")
+    if not current_main_var:
+        raise HTTPException(400, "当前数据集缺少有效的基础聚类矩阵，无法追加")
+    if not incoming_main_var:
+        raise HTTPException(400, "追加文件缺少有效的基础聚类矩阵")
+
+    current_matrix = np.asarray(current_mat[current_main_var])
+    incoming_matrix = np.asarray(incoming_mat[incoming_main_var])
+    if current_matrix.ndim < 2 or incoming_matrix.ndim < 2:
+        raise HTTPException(400, "基础聚类矩阵必须是二维结构，无法追加")
+    if current_matrix.shape[1:] != incoming_matrix.shape[1:]:
+        raise HTTPException(400, "追加文件的基础聚类矩阵列数必须与当前数据集一致")
+
+    current_has_labels = bool(current_parsed.get("hasLabels"))
+    incoming_has_labels = bool(incoming_parsed.get("hasLabels"))
+    if current_has_labels != incoming_has_labels:
+        raise HTTPException(400, "追加文件的标签状态必须与当前数据集一致")
+
+    combined_mat = _visible_mat_variables(current_mat)
+    combined_mat[current_main_var] = np.concatenate([current_matrix, incoming_matrix], axis=0)
+
+    if current_has_labels:
+        current_label_var = current_parsed.get("labelVariable")
+        incoming_label_var = incoming_parsed.get("labelVariable")
+        if not current_label_var or not incoming_label_var:
+            raise HTTPException(400, "追加文件的标签变量无法识别")
+
+        current_labels = _raw_label_values(current_mat[current_label_var])
+        incoming_labels = _raw_label_values(incoming_mat[incoming_label_var])
+        if current_labels.size != int(current_parsed.get("sampleCount") or 0):
+            raise HTTPException(400, "当前数据集的标签数量与样本数量不一致，无法追加")
+        if incoming_labels.size != int(incoming_parsed.get("sampleCount") or 0):
+            raise HTTPException(400, "追加文件的标签数量与样本数量不一致")
+
+        combined_mat[current_label_var] = _merge_label_values(
+            current_mat[current_label_var],
+            incoming_mat[incoming_label_var],
+        )
+
+    buffer = io.BytesIO()
+    sio.savemat(buffer, combined_mat)
+    return buffer.getvalue()
+
+
 def _get_user_dataset(session: Session, dataset_id: int, user: User) -> Dataset:
     dataset = session.scalar(
         select(Dataset).where(Dataset.id == dataset_id, Dataset.user_id == user.id),
@@ -517,7 +603,7 @@ async def upload_dataset(
 
     dataset_name = _dataset_name(file.filename)
     if not allow_duplicate and _find_name_conflict(session, user, dataset_name):
-        raise HTTPException(409, f"已存在同名数据集“{dataset_name}”，请作为新版本更新或确认保留独立副本")
+        raise HTTPException(409, f"已存在同名数据集“{dataset_name}”，请使用追加数据或确认保留独立副本")
 
     parsed, file_hash, storage_path = _save_dataset_upload(user.id, file.filename, content)
 
@@ -592,6 +678,62 @@ async def replace_dataset_file(
         session.flush()
         quality = _upsert_quality(session, dataset, parsed)
         _record_revision(session, dataset, parsed, "replaced", quality)
+        session.commit()
+        session.refresh(dataset)
+    except Exception:
+        session.rollback()
+        if storage_path.exists():
+            storage_path.unlink()
+        raise
+
+    return _catalog_item(session, dataset, parsed, quality)
+
+
+@router.post("/{dataset_id}/append", response_model=DatasetCatalogItemResponse)
+async def append_dataset_file(
+    dataset_id: int,
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    dataset = _get_user_dataset(session, dataset_id, user)
+    if not file.filename:
+        raise HTTPException(400, "未选择文件")
+
+    incoming_content = await file.read()
+    if not incoming_content:
+        raise HTTPException(400, "上传文件为空")
+
+    current_path = Path(dataset.storage_path)
+    if not current_path.exists():
+        raise HTTPException(409, "当前数据集文件不存在，无法追加")
+
+    current_content = current_path.read_bytes()
+    current_parsed = _parse_mat_content(dataset.original_filename, current_content)
+    current_quality = _quality_for_dataset(session, dataset, current_parsed)
+    if _next_version(session, dataset.id) == 1:
+        _record_revision(session, dataset, current_parsed, "uploaded", current_quality)
+
+    appended_content = _build_appended_mat_content(
+        dataset.original_filename,
+        current_content,
+        file.filename,
+        incoming_content,
+    )
+    parsed, file_hash, storage_path = _save_dataset_upload(user.id, dataset.original_filename, appended_content)
+
+    dataset.storage_path = str(storage_path)
+    dataset.file_hash = file_hash
+    dataset.sample_count = parsed["sampleCount"]
+    dataset.base_cluster_count = parsed["baseCount"]
+    dataset.has_ground_truth = parsed["hasLabels"]
+    dataset.cluster_count = parsed["classCount"] if parsed["hasLabels"] else None
+    dataset.status = "ready"
+
+    try:
+        session.flush()
+        quality = _upsert_quality(session, dataset, parsed)
+        _record_revision(session, dataset, parsed, "appended", quality)
         session.commit()
         session.refresh(dataset)
     except Exception:

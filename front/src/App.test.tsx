@@ -281,11 +281,13 @@ function mockAuthApi(resultEnvelope = createTaskResultEnvelope()) {
 
 function mockDatasetApi({
   datasets,
+  appendResponse,
   patchResponse,
   deleteOk = true,
   deleteDetail = '删除失败',
 }: {
   datasets: DatasetListFixture;
+  appendResponse?: DatasetFixture;
   patchResponse?: DatasetFixture;
   deleteOk?: boolean;
   deleteDetail?: string;
@@ -300,6 +302,10 @@ function mockDatasetApi({
 
     if (url.endsWith('/api/datasets') && method === 'GET') {
       return createResponse(datasets);
+    }
+
+    if (appendResponse && url.endsWith(`/api/datasets/${appendResponse.id}/append`) && method === 'POST') {
+      return createResponse(appendResponse);
     }
 
     if (patchResponse && url.endsWith(`/api/datasets/${patchResponse.id}`) && method === 'PATCH') {
@@ -826,8 +832,53 @@ describe('dashboard homepage', () => {
     }
 
     expect(within(card).getByRole('button', { name: '查看' })).toHaveAttribute('title', '查看');
-    expect(within(card).getByRole('button', { name: '更新' })).toHaveAttribute('title', '更新');
+    expect(within(card).getByRole('button', { name: '追加数据' })).toHaveAttribute('title', '向当前数据集追加数据');
     expect(within(card).getByRole('button', { name: '删除' })).toHaveAttribute('title', '删除');
+  });
+
+  it('appends uploaded data to the current dataset instead of replacing it', async () => {
+    const dataset = createDataset();
+    const appendedDataset = createDataset({
+      sampleCount: 48,
+      version: 2,
+      matrixShape: 'E: 48 x 24',
+      labelShape: 'y: 48',
+    });
+    localStorage.setItem('soft_web_access_token', 'access-token');
+    const fetchMock = mockDatasetApi({ datasets: [dataset], appendResponse: appendedDataset });
+
+    const user = userEvent.setup();
+    const { container } = renderApp('/workbench/datasets');
+
+    const row = (await screen.findByText(dataset.name)).closest('.dataset-list-item');
+    if (!(row instanceof HTMLElement)) {
+      throw new Error('未找到数据集行');
+    }
+
+    await user.click(within(row).getByRole('button', { name: '追加数据' }));
+    const fileInput = container.querySelector('input[type="file"]');
+    if (!(fileInput instanceof HTMLInputElement)) {
+      throw new Error('未找到文件选择器');
+    }
+
+    await user.upload(
+      fileInput,
+      new File(['append payload'], 'new_samples.mat', { type: 'application/octet-stream' }),
+    );
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/\/api\/datasets\/8\/append$/),
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            Authorization: 'Bearer access-token',
+          }),
+          body: expect.any(FormData),
+        }),
+      ),
+    );
+    expect(await screen.findByText('48 / 24 / 3')).toBeInTheDocument();
   });
 
   it('groups dataset quality and usage state in the catalog row', async () => {

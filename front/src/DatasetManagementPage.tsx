@@ -7,10 +7,10 @@ import {
   ArrowLeft,
   Download,
   Eye,
+  FilePlus2,
   Grid3x3,
   List,
   PencilLine,
-  RefreshCw,
   Search,
   Shuffle,
   Trash2,
@@ -429,14 +429,14 @@ function normalizeViewMode(value: string | null): 'list' | 'card' {
 function DatasetCardGrid({
   datasets,
   onSelect,
-  onUpdate,
+  onAppend,
   onDelete,
   emptyMessage,
   actionDisabled,
 }: {
   datasets: DatasetCatalogItem[];
   onSelect: (id: string) => void;
-  onUpdate: (dataset: DatasetCatalogItem) => void;
+  onAppend: (dataset: DatasetCatalogItem) => void;
   onDelete: (dataset: DatasetCatalogItem) => void;
   emptyMessage: string;
   actionDisabled: boolean;
@@ -533,13 +533,13 @@ function DatasetCardGrid({
                   </button>
                   <button
                     type="button"
-                    className="dataset-list-action update"
-                    aria-label="更新"
-                    title="更新"
+                    className="dataset-list-action append"
+                    aria-label="追加数据"
+                    title="向当前数据集追加数据"
                     disabled={actionDisabled}
-                    onClick={() => onUpdate(d)}
+                    onClick={() => onAppend(d)}
                   >
-                    <RefreshCw size={15} aria-hidden="true" />
+                    <FilePlus2 size={15} aria-hidden="true" />
                   </button>
                   <button
                     type="button"
@@ -568,7 +568,7 @@ function DatasetCatalogView({
   viewMode,
   emptyMessage,
   onSelect,
-  onUpdate,
+  onAppend,
   onDelete,
   onViewModeChange,
   onUpload,
@@ -578,7 +578,7 @@ function DatasetCatalogView({
   viewMode: 'list' | 'card';
   emptyMessage: string;
   onSelect: (id: string) => void;
-  onUpdate: (dataset: DatasetCatalogItem) => void;
+  onAppend: (dataset: DatasetCatalogItem) => void;
   onDelete: (dataset: DatasetCatalogItem) => void;
   onViewModeChange: (mode: 'list' | 'card') => void;
   onUpload: () => void;
@@ -750,13 +750,13 @@ function DatasetCatalogView({
                   </button>
                   <button
                     type="button"
-                    className="dataset-list-action update"
-                    aria-label="更新"
-                    title="更新"
+                    className="dataset-list-action append"
+                    aria-label="追加数据"
+                    title="向当前数据集追加数据"
                     disabled={uploading}
-                    onClick={() => onUpdate(d)}
+                    onClick={() => onAppend(d)}
                   >
-                    <RefreshCw size={15} aria-hidden="true" />
+                    <FilePlus2 size={15} aria-hidden="true" />
                   </button>
                   <button
                     type="button"
@@ -782,7 +782,7 @@ function DatasetCatalogView({
         <DatasetCardGrid
           datasets={visibleDatasets}
           onSelect={onSelect}
-          onUpdate={onUpdate}
+          onAppend={onAppend}
           onDelete={onDelete}
           emptyMessage={tableEmptyMessage}
           actionDisabled={uploading}
@@ -1083,7 +1083,7 @@ export function DatasetManagementPage() {
   const [renameTarget, setRenameTarget] = useState<DatasetCatalogItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DatasetCatalogItem | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const uploadTargetIdRef = useRef<string | null>(null);
+  const appendTargetIdRef = useRef<string | null>(null);
 
   const activeDataset = selectedId
     ? datasets.find((d) => d.id === selectedId) ?? null
@@ -1152,22 +1152,22 @@ export function DatasetManagementPage() {
   }, []);
 
   function handleUploadClick() {
-    uploadTargetIdRef.current = null;
+    appendTargetIdRef.current = null;
     fileInputRef.current?.click();
   }
 
-  function handleUpdateClick(dataset: DatasetCatalogItem) {
-    uploadTargetIdRef.current = dataset.id;
+  function handleAppendClick(dataset: DatasetCatalogItem) {
+    appendTargetIdRef.current = dataset.id;
     fileInputRef.current?.click();
   }
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) {
-      uploadTargetIdRef.current = null;
+      appendTargetIdRef.current = null;
       return;
     }
-    const targetId = uploadTargetIdRef.current;
+    const appendTargetId = appendTargetIdRef.current;
 
     setUploading(true);
     setLoadError(null);
@@ -1177,30 +1177,32 @@ export function DatasetManagementPage() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const res = await fetch(targetId ? `${API}/datasets/${targetId}` : `${API}/datasets`, {
-        method: targetId ? 'PUT' : 'POST',
+      const res = await fetch(appendTargetId ? `${API}/datasets/${appendTargetId}/append` : `${API}/datasets`, {
+        method: 'POST',
         headers: getAuthHeaders(),
         body: formData,
       });
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(typeof err.detail === 'string' ? err.detail : targetId ? '更新失败' : '上传失败');
+        throw new Error(typeof err.detail === 'string' ? err.detail : appendTargetId ? '追加失败' : '上传失败');
       }
 
       const data = await res.json();
       const savedDataset = normalizeDataset(data);
 
       setDatasets((prev) => {
-        if (!targetId) return [savedDataset, ...prev];
-        return [savedDataset, ...prev.filter((d) => d.id !== targetId)];
+        if (!appendTargetId) return [savedDataset, ...prev];
+        return prev.map((d) => (d.id === appendTargetId ? savedDataset : d));
       });
-      setSelectedId(null);
+      if (!appendTargetId) {
+        setSelectedId(null);
+      }
     } catch (err) {
-      setUploadError(err instanceof Error ? err.message : targetId ? '更新失败' : '上传失败');
+      setUploadError(err instanceof Error ? err.message : appendTargetId ? '追加失败' : '上传失败');
     } finally {
       setUploading(false);
-      uploadTargetIdRef.current = null;
+      appendTargetIdRef.current = null;
       // 重置 input 以便再次选择同一文件
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
@@ -1266,7 +1268,7 @@ export function DatasetManagementPage() {
       viewMode={viewMode}
       emptyMessage={catalogEmptyMessage}
       onSelect={setSelectedId}
-      onUpdate={handleUpdateClick}
+      onAppend={handleAppendClick}
       onDelete={openDeleteDialog}
       onViewModeChange={handleViewModeChange}
       onUpload={handleUploadClick}
