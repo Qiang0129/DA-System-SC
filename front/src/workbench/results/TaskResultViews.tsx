@@ -110,8 +110,8 @@ function ResultState({ resource }: { resource: TaskResultResource }) {
     tone = 'warning';
   }
   if (state === 'legacy') {
-    title = '这是旧版演示结果';
-    detail = '旧结果缺少算法产物，重新执行任务后才能查看可信分析。';
+    title = '结果结构需要更新';
+    detail = '当前任务结果缺少完整算法产物，重新执行任务后可生成新版分析结果。';
     tone = 'warning';
   }
 

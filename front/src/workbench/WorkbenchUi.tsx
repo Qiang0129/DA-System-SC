@@ -134,7 +134,7 @@ export function WorkbenchProgress({
         aria-valuemax={100}
         aria-valuenow={safeValue}
       >
-        <span style={{ width: `${safeValue}%` }} />
+        <span style={{ transform: `scaleX(${safeValue / 100})` }} />
       </div>
     </div>
   );

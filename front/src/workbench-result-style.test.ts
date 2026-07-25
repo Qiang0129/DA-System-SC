@@ -34,4 +34,15 @@ describe('workbench result detail styles', () => {
     expect(getProperty(formulaRule, 'align-self')).toBe('center');
     expect(getProperty(formulaRule, 'justify-self')).toBe('stretch');
   });
+
+  it('uses transform-based progress motion to avoid layout thrashing', () => {
+    const progressRule = getRule('.workbench-progress-track > span');
+    const dashboardRule = getRule('.dashboard-content');
+
+    expect(getProperty(progressRule, 'width')).toBe('100%');
+    expect(getProperty(progressRule, 'transform-origin')).toBe('left center');
+    expect(getProperty(progressRule, 'transition')).toBe('transform 420ms var(--ease-out-quart)');
+    expect(dashboardRule).not.toContain(`transition: ${'margin-left'}`);
+    expect(css).not.toContain(`transition: ${'width'} var(--motion-normal)`);
+  });
 });

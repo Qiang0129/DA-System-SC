@@ -35,7 +35,7 @@ export function TaskFocusPanel({ tasks, onOpenTask, onStartTask }: Props) {
             {' · '}已运行 {formatRuntime(runningTask.runtimeSeconds)}
           </p>
           <div className="task-focus-progress" aria-label={`任务进度 ${Math.round(runningTask.progress)}%`}>
-            <span style={{ width: `${Math.max(0, Math.min(100, runningTask.progress || 0))}%` }} />
+            <span style={{ transform: `scaleX(${Math.max(0, Math.min(100, runningTask.progress || 0)) / 100})` }} />
           </div>
         </article>
       ) : null}
