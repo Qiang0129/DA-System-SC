@@ -34,6 +34,7 @@ import {
   formatNumber,
   formatPercent,
   metricLabels,
+  navigateToTaskResult,
   type MetricKey,
 } from './resultPresentation';
 import type { TaskResultResource } from './types';
@@ -46,10 +47,6 @@ type OverviewStage = {
   section: string;
   icon: LucideIcon;
 };
-
-function taskResultPath(section: string, taskId: number) {
-  return `/workbench/${section}?taskId=${encodeURIComponent(taskId)}`;
-}
 
 export function AnalysisOverviewPage({ resource }: { resource: TaskResultResource }) {
   const navigate = useNavigate();
@@ -144,7 +141,7 @@ export function AnalysisOverviewPage({ resource }: { resource: TaskResultResourc
     },
   ];
 
-  const goToResult = (section: string) => navigate(taskResultPath(section, task.id));
+  const goToResult = (section: string) => navigateToTaskResult(navigate, section, task.id);
 
   return (
     <section className="soft-page result-overview-page analysis-overview-page">

@@ -171,7 +171,7 @@ export function TaskTable({
                         </strong>
                       </div>
                     </td>
-                    <td>{stageLabel(task.currentStage)}</td>
+                    <td className="task-stage-cell">{stageLabel(task.currentStage)}</td>
                     <td>{task.createdAt || '-'}</td>
                     <td>{formatRuntime(task.runtimeSeconds)}</td>
                     <td>

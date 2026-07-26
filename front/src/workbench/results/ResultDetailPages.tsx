@@ -58,7 +58,7 @@ import {
   formatNumber,
   formatPercent,
   metricLabels,
-  taskResultPath,
+  navigateToTaskResult,
   type MetricKey,
 } from './resultPresentation';
 import type { AnalysisResult, TaskExport, TaskResultResource } from './types';
@@ -218,7 +218,7 @@ export function CaResultPage({ resource }: { resource: TaskResultResource }) {
           actions={
             <DetailLink
               label="导出完整矩阵"
-              onClick={() => navigate(taskResultPath('export', task.id))}
+              onClick={() => navigateToTaskResult(navigate, 'export', task.id)}
             />
           }
         />
@@ -686,7 +686,7 @@ export function VisualizationResultPage({ resource }: { resource: TaskResultReso
           <dl className="result-view-summary">
             {summary.map(([label, value]) => <div key={String(label)}><dt>{label}</dt><dd>{String(value)}</dd></div>)}
           </dl>
-          <button type="button" className="btn btn-primary result-view-detail-button" onClick={() => navigate(taskResultPath(current.section, task.id))}>
+          <button type="button" className="btn btn-primary result-view-detail-button" onClick={() => navigateToTaskResult(navigate, current.section, task.id)}>
             打开专业分析页 <ArrowRight size={15} />
           </button>
         </aside>

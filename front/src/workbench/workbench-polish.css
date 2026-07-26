@@ -4368,10 +4368,8 @@
 .analysis-overview-follow-up {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(240px, 0.72fr) minmax(0, 2.28fr);
-  align-items: stretch;
-  padding: 0;
-  overflow: hidden;
+  gap: 12px;
+  padding: 16px;
 }
 
 .analysis-overview-follow-up-heading {
@@ -4379,9 +4377,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 16px;
-  color: #1f64bd;
-  background: #f4f8fc;
+  color: #52667b;
 }
 
 .analysis-overview-follow-up-heading > div {
@@ -4400,18 +4396,19 @@
 
 .analysis-overview-follow-up-heading strong {
   color: #2b4056;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .analysis-overview-follow-up-heading span {
   color: #738397;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .analysis-overview-follow-up-actions {
   min-width: 0;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .analysis-overview-follow-up-actions button {
@@ -4422,20 +4419,24 @@
   align-items: center;
   gap: 9px;
   padding: 12px 14px;
-  border: 0;
-  border-left: 1px solid #e3e8ed;
+  border: 1px solid #e3e8ed;
+  border-radius: 12px;
   color: #607184;
   background: #ffffff;
   cursor: pointer;
   text-align: left;
   transition:
+    border-color var(--motion-fast) ease,
     color var(--motion-fast) ease,
-    background-color var(--motion-fast) ease;
+    background-color var(--motion-fast) ease,
+    transform var(--motion-fast) ease;
 }
 
 .analysis-overview-follow-up-actions button:hover {
   color: #1f64bd;
   background: #f5f8fb;
+  border-color: #c8d8ec;
+  transform: translateY(-1px);
 }
 
 .analysis-overview-follow-up-actions button > span {
@@ -4492,7 +4493,7 @@
   }
 
   .analysis-overview-follow-up {
-    grid-template-columns: minmax(220px, 0.62fr) minmax(0, 2.38fr);
+    padding: 14px;
   }
 
   .analysis-overview-follow-up-actions button {

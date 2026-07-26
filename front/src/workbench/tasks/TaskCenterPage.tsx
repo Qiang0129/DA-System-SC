@@ -26,6 +26,7 @@ import { TaskFiltersBar } from './components/TaskFiltersBar';
 import { TaskFocusPanel } from './components/TaskFocusPanel';
 import { TaskStatsBar } from './components/TaskStatsBar';
 import { TaskTable } from './components/TaskTable';
+import { navigateToTaskResult } from '../results/resultPresentation';
 import { loadTaskLocalMeta, saveTaskLocalMeta, type TaskLocalMeta, type TaskLocalMetaMap } from './taskLocalMeta';
 import type {
   AnalysisTask,
@@ -421,7 +422,7 @@ export function TaskCenterPage() {
             if (detailTask?.id === task.id) setDetailTask(null);
           }, `任务 #${task.id} 已删除`);
         }}
-        onOpenResults={(task) => navigate(`/workbench/results?taskId=${task.id}`)}
+        onOpenResults={(task) => navigateToTaskResult(navigate, 'results', task.id)}
         onToggleCompare={toggleCompare}
         onToggleFavorite={(task) => updateTaskLocalMeta(task.id, { favorite: !taskLocalMeta[task.id]?.favorite })}
       />
@@ -463,9 +464,9 @@ export function TaskCenterPage() {
             setDetailTask(null);
           }, `任务 #${task.id} 已删除`);
         }}
-        onOpenResults={(task) => navigate(`/workbench/results?taskId=${task.id}`)}
-        onOpenExport={(task) => navigate(`/workbench/export?taskId=${task.id}`)}
-        onOpenReport={(task) => navigate(`/workbench/reports?taskId=${task.id}`)}
+        onOpenResults={(task) => navigateToTaskResult(navigate, 'results', task.id)}
+        onOpenExport={(task) => navigateToTaskResult(navigate, 'export', task.id)}
+        onOpenReport={(task) => navigateToTaskResult(navigate, 'reports', task.id)}
         onUpdateLocalMeta={(patch) => {
           if (detailTask) updateTaskLocalMeta(detailTask.id, patch);
         }}

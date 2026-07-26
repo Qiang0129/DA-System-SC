@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Boxes, ClipboardCheck, Network, RefreshCw, Target, type LucideIcon } from 'lucide-react';
 import {
   WorkbenchMetricStrip,
   WorkbenchPageHeader,
 } from '../WorkbenchUi';
-import { formatPercent, metricLabels, type MetricKey } from './resultPresentation';
+import { formatPercent, hasResultBackState, metricLabels, type MetricKey } from './resultPresentation';
 import type { AnalysisResult, TaskResultResource } from './types';
 
 export function ReadyHeader({
@@ -19,6 +19,7 @@ export function ReadyHeader({
   resource: TaskResultResource;
   actions?: ReactNode;
 }) {
+  const showBackButton = useShouldShowResultBack();
   const task = resource.envelope!.task!;
   const result = resource.envelope!.result!;
 
@@ -27,7 +28,7 @@ export function ReadyHeader({
       icon={icon}
       title={title}
       context={`任务 #${task.id} · ${task.datasetName} · ${task.mode} · 第 ${result.preview.summary.representativeRun} 轮代表结果`}
-      backAction={<ResultBackButton taskId={task.id} />}
+      backAction={showBackButton ? <ResultBackButton taskId={task.id} /> : undefined}
       actions={
         actions ?? (
           <button type="button" className="btn btn-secondary" onClick={resource.refresh}>
@@ -38,6 +39,11 @@ export function ReadyHeader({
       }
     />
   );
+}
+
+export function useShouldShowResultBack() {
+  const location = useLocation();
+  return hasResultBackState(location.state);
 }
 
 export function ResultBackButton({ taskId }: { taskId?: number | null }) {

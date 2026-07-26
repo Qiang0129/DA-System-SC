@@ -459,6 +459,7 @@ describe('dashboard homepage', () => {
     await screen.findByRole('heading', { name: '性能评估', level: 1 });
     expect(window.location.pathname).toBe('/workbench/evaluation');
     expect(window.location.search).toBe('?taskId=3');
+    expect(screen.getByRole('button', { name: '返回' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '返回' }));
     await screen.findByRole('heading', { name: '分析工作台', level: 1 });
@@ -485,7 +486,7 @@ describe('dashboard homepage', () => {
       expect(screen.getByRole('heading', { name: sectionTitle })).toBeInTheDocument();
       expect(screen.getAllByText(/verification_dataset/).length).toBeGreaterThan(0);
       expect(window.location.search).toBe('?taskId=3');
-      expect(screen.getByRole('button', { name: '返回' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: '返回' })).not.toBeInTheDocument();
 
       if (path.startsWith('/workbench/ca-matrix')) {
         const formula = screen.getByLabelText('CA 等于 M 乘 M 转置除以基础聚类数量');

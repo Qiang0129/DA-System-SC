@@ -22,7 +22,7 @@ import {
 import { formatRuntime, getStatusMeta, getTaskRunProgress } from '../tasks/taskStatus';
 import type { AnalysisTaskLog } from '../tasks/types';
 import { downloadTextFile } from './resultPresentation';
-import { ResultBackButton } from './ResultPageShared';
+import { ResultBackButton, useShouldShowResultBack } from './ResultPageShared';
 import type { TaskResultResource } from './types';
 
 type LogLevelFilter = 'all' | 'info' | 'warning' | 'error';
@@ -130,6 +130,7 @@ function LogTimelineSkeleton() {
 }
 
 export function TaskLogsPage({ resource }: { resource: TaskResultResource }) {
+  const showBackButton = useShouldShowResultBack();
   const task = resource.envelope!.task!;
   const runProgress = getTaskRunProgress(task);
   const [level, setLevel] = useState<LogLevelFilter>('all');
@@ -205,7 +206,7 @@ export function TaskLogsPage({ resource }: { resource: TaskResultResource }) {
             {statusMeta.label}
           </WorkbenchStatus>
         )}
-        backAction={<ResultBackButton taskId={task.id} />}
+        backAction={showBackButton ? <ResultBackButton taskId={task.id} /> : undefined}
         actions={(
           <>
             <button

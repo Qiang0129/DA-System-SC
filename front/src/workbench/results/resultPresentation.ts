@@ -1,4 +1,12 @@
+import type { NavigateFunction } from 'react-router-dom';
+
 export type MetricKey = 'acc' | 'nmi' | 'ari' | 'f1';
+
+export type ResultBackLocationState = {
+  resultBack?: boolean;
+};
+
+export const resultBackState = { resultBack: true } satisfies ResultBackLocationState;
 
 export const metricLabels: Record<MetricKey, string> = {
   acc: 'ACC',
@@ -34,4 +42,16 @@ export function downloadTextFile(filename: string, content: string, type: string
 
 export function taskResultPath(section: string, taskId: number) {
   return `/workbench/${section}?taskId=${encodeURIComponent(taskId)}`;
+}
+
+export function hasResultBackState(state: unknown): state is ResultBackLocationState {
+  return Boolean(
+    state &&
+      typeof state === 'object' &&
+      (state as ResultBackLocationState).resultBack === true,
+  );
+}
+
+export function navigateToTaskResult(navigate: NavigateFunction, section: string, taskId: number) {
+  navigate(taskResultPath(section, taskId), { state: resultBackState });
 }

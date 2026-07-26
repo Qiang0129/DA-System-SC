@@ -39,7 +39,7 @@ import {
   type EvaluationTrendMode,
   useResultChart,
 } from './ResultChartPanels';
-import { MetricStrip, ReadyHeader, ResultBackButton } from './ResultPageShared';
+import { MetricStrip, ReadyHeader, ResultBackButton, useShouldShowResultBack } from './ResultPageShared';
 import {
   buildEvaluationCsv,
   deriveEvaluationSummary,
@@ -61,6 +61,7 @@ type Props = {
 
 function ResultState({ resource }: { resource: TaskResultResource }) {
   const navigate = useNavigate();
+  const showBackButton = useShouldShowResultBack();
   const envelope = resource.envelope;
   const task = envelope?.task;
   const state = envelope?.state;
@@ -122,7 +123,7 @@ function ResultState({ resource }: { resource: TaskResultResource }) {
         title="分析结果"
         context={task ? `任务 #${task.id} · ${task.datasetName} · ${task.mode}` : '结果上下文'}
         status={<WorkbenchStatus tone={tone} pulse={state === 'running'}>{title}</WorkbenchStatus>}
-        backAction={<ResultBackButton taskId={task?.id} />}
+        backAction={showBackButton ? <ResultBackButton taskId={task?.id} /> : undefined}
       />
       <section className="panel result-state-panel">
         <WorkbenchNotice tone={tone} icon={tone === 'error' ? XCircle : Activity} title={title} detail={detail} />
