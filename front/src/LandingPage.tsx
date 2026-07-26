@@ -105,7 +105,7 @@ const ANALYSIS_WORKFLOW_STAGES: readonly WorkflowStage[] = [
     description: '导入并确认基础结果',
     Icon: Database,
     positionX: '9%',
-    nodeY: '90px',
+    nodeY: '82px',
     placement: 'upper',
   },
   {
@@ -114,7 +114,7 @@ const ANALYSIS_WORKFLOW_STAGES: readonly WorkflowStage[] = [
     description: '生成协关联矩阵',
     Icon: Boxes,
     positionX: '29.5%',
-    nodeY: '244px',
+    nodeY: '154px',
     placement: 'lower',
   },
   {
@@ -123,7 +123,7 @@ const ANALYSIS_WORKFLOW_STAGES: readonly WorkflowStage[] = [
     description: '优化融合权重',
     Icon: Network,
     positionX: '50%',
-    nodeY: '90px',
+    nodeY: '82px',
     placement: 'upper',
   },
   {
@@ -132,7 +132,7 @@ const ANALYSIS_WORKFLOW_STAGES: readonly WorkflowStage[] = [
     description: '形成标签并计算核心指标',
     Icon: ClipboardCheck,
     positionX: '70.5%',
-    nodeY: '244px',
+    nodeY: '154px',
     placement: 'lower',
   },
   {
@@ -141,7 +141,7 @@ const ANALYSIS_WORKFLOW_STAGES: readonly WorkflowStage[] = [
     description: '保存标签、图表与运行产物',
     Icon: Download,
     positionX: '91%',
-    nodeY: '90px',
+    nodeY: '82px',
     placement: 'upper',
   },
 ];
@@ -327,7 +327,7 @@ function WorkflowTimelineSection() {
           <ol className="landing-workflow-timeline" aria-label="五阶段分析执行流程">
             <svg
               className="workflow-route"
-              viewBox="0 0 1000 330"
+              viewBox="0 0 1000 240"
               preserveAspectRatio="none"
               aria-hidden="true"
               focusable="false"
@@ -341,7 +341,7 @@ function WorkflowTimelineSection() {
               </defs>
               <path
                 className="workflow-route-path"
-                d="M 90 90 C 190 90, 190 244, 295 244 S 400 90, 500 90 S 605 244, 705 244 S 810 90, 910 90"
+                d="M 90 82 C 190 82, 190 154, 295 154 S 400 82, 500 82 S 605 154, 705 154 S 810 82, 910 82"
               />
             </svg>
             {ANALYSIS_WORKFLOW_STAGES.map(({ order, title, description, Icon, positionX, nodeY, placement }) => {

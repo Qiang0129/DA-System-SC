@@ -109,7 +109,7 @@ describe('landing URL copy button styles', () => {
     expect(getProperty(workflowShellRule, 'border')).toBe('0');
     expect(getProperty(workflowShellRule, 'box-shadow')).toBe('none');
     expect(getProperty(workflowShellRule, 'overflow')).toBe('visible');
-    expect(getProperty(timelineRule, 'min-height')).toBe('330px');
+    expect(getProperty(timelineRule, 'min-height')).toBe('240px');
     expect(getProperty(stageRule, 'position')).toBe('absolute');
     expect(getProperty(stageRule, 'left')).toBe('var(--workflow-stage-x)');
     expect(getProperty(nodeRule, 'top')).toBe('var(--workflow-node-y)');

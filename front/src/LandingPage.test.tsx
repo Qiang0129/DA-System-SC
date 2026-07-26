@@ -70,11 +70,11 @@ describe('LandingPage', () => {
       expect.stringContaining('is-upper'),
     ]);
     expect(stages.map((stage) => stage.getAttribute('style'))).toEqual([
-      '--workflow-stage-x: 9%; --workflow-node-y: 90px;',
-      '--workflow-stage-x: 29.5%; --workflow-node-y: 244px;',
-      '--workflow-stage-x: 50%; --workflow-node-y: 90px;',
-      '--workflow-stage-x: 70.5%; --workflow-node-y: 244px;',
-      '--workflow-stage-x: 91%; --workflow-node-y: 90px;',
+      '--workflow-stage-x: 9%; --workflow-node-y: 82px;',
+      '--workflow-stage-x: 29.5%; --workflow-node-y: 154px;',
+      '--workflow-stage-x: 50%; --workflow-node-y: 82px;',
+      '--workflow-stage-x: 70.5%; --workflow-node-y: 154px;',
+      '--workflow-stage-x: 91%; --workflow-node-y: 82px;',
     ]);
     expect(within(timeline).queryByRole('button')).not.toBeInTheDocument();
     expect(within(timeline).queryByRole('link')).not.toBeInTheDocument();
