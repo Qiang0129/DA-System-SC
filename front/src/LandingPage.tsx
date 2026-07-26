@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { type CSSProperties, useEffect, useState } from 'react';
+import { Boxes, ClipboardCheck, Database, Download, Network, type LucideIcon } from 'lucide-react';
 import loginIcon from './images/登录.svg';
 import registerIcon from './images/注册.svg';
 import copyIcon from './images/复制.svg';
@@ -86,6 +87,69 @@ const DETAIL_CARDS = [
     description: '导出聚类标签、指标表格、图像结果、运行日志，并生成聚类分析报告。',
   },
 ];
+
+type WorkflowStage = {
+  order: string;
+  title: string;
+  description: string;
+  Icon: LucideIcon;
+  positionX: string;
+  nodeY: string;
+  placement: 'upper' | 'lower';
+};
+
+const ANALYSIS_WORKFLOW_STAGES: readonly WorkflowStage[] = [
+  {
+    order: '01',
+    title: '选择基础聚类结果',
+    description: '导入并确认基础结果',
+    Icon: Database,
+    positionX: '9%',
+    nodeY: '90px',
+    placement: 'upper',
+  },
+  {
+    order: '02',
+    title: 'GBE 编码与 CA 构建',
+    description: '生成协关联矩阵',
+    Icon: Boxes,
+    positionX: '29.5%',
+    nodeY: '244px',
+    placement: 'lower',
+  },
+  {
+    order: '03',
+    title: '多核相似性学习',
+    description: '优化融合权重',
+    Icon: Network,
+    positionX: '50%',
+    nodeY: '90px',
+    placement: 'upper',
+  },
+  {
+    order: '04',
+    title: '谱聚类与指标评估',
+    description: '形成标签并计算核心指标',
+    Icon: ClipboardCheck,
+    positionX: '70.5%',
+    nodeY: '244px',
+    placement: 'lower',
+  },
+  {
+    order: '05',
+    title: '结果落盘',
+    description: '保存标签、图表与运行产物',
+    Icon: Download,
+    positionX: '91%',
+    nodeY: '90px',
+    placement: 'upper',
+  },
+];
+
+type WorkflowStageStyle = CSSProperties & {
+  '--workflow-stage-x': string;
+  '--workflow-node-y': string;
+};
 
 function TopBar() {
   return (
@@ -247,6 +311,65 @@ function DetailSection() {
   );
 }
 
+function WorkflowTimelineSection() {
+  return (
+    <section className="landing-workflow-section" aria-labelledby="workflow-timeline-title">
+      <div className="landing-section-inner">
+        <div className="landing-workflow-card">
+          <header className="landing-workflow-heading">
+            <div>
+              <span className="landing-workflow-kicker">执行流程</span>
+              <h2 id="workflow-timeline-title">分析执行脉络</h2>
+            </div>
+            <p>从基础聚类结果到可交付分析产物</p>
+          </header>
+
+          <ol className="landing-workflow-timeline" aria-label="五阶段分析执行流程">
+            <svg
+              className="workflow-route"
+              viewBox="0 0 1000 330"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <defs>
+                <linearGradient id="workflow-route-gradient" x1="0%" y1="50%" x2="100%" y2="50%">
+                  <stop offset="0%" stopColor="#60a5fa" />
+                  <stop offset="48%" stopColor="#2dd4bf" />
+                  <stop offset="100%" stopColor="#60a5fa" />
+                </linearGradient>
+              </defs>
+              <path
+                className="workflow-route-path"
+                d="M 90 90 C 190 90, 190 244, 295 244 S 400 90, 500 90 S 605 244, 705 244 S 810 90, 910 90"
+              />
+            </svg>
+            {ANALYSIS_WORKFLOW_STAGES.map(({ order, title, description, Icon, positionX, nodeY, placement }) => {
+              const stageStyle: WorkflowStageStyle = {
+                '--workflow-stage-x': positionX,
+                '--workflow-node-y': nodeY,
+              };
+
+              return (
+                <li key={title} className={`workflow-stage is-${placement}`} style={stageStyle}>
+                  <div className="workflow-stage-copy">
+                    <span className="workflow-stage-order">{order}</span>
+                    <h3>{title}</h3>
+                    <p>{description}</p>
+                  </div>
+                  <span className="workflow-stage-node" aria-hidden="true">
+                    <Icon size={17} strokeWidth={2.1} />
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function AboutSection({
   onEnterWorkbench,
   isEnteringWorkbench,
@@ -311,6 +434,7 @@ export function LandingPage({
       <main className="landing-main">
         <Hero onLogin={onLogin} onRegister={onRegister} />
         <DetailSection />
+        <WorkflowTimelineSection />
         <AboutSection onEnterWorkbench={onEnterWorkbench} isEnteringWorkbench={isEnteringWorkbench} />
       </main>
     </div>

@@ -96,6 +96,32 @@ describe('landing URL copy button styles', () => {
     expect(css).not.toContain('.capability-icon::after');
   });
 
+  it('uses an S-shaped desktop route and falls back to a vertical route on narrower screens', () => {
+    const timelineRule = getRule('.landing-workflow-timeline');
+    const routeRule = getRule('.workflow-route');
+    const routePathRule = getRule('.workflow-route-path');
+    const workflowShellRule = getRule('.landing-workflow-card');
+    const stageRule = getRule('.workflow-stage');
+    const nodeRule = getRule('.workflow-stage-node');
+    const lowerCopyRule = getRule('.workflow-stage.is-lower .workflow-stage-copy');
+
+    expect(getProperty(workflowShellRule, 'background')).toBe('transparent');
+    expect(getProperty(workflowShellRule, 'border')).toBe('0');
+    expect(getProperty(workflowShellRule, 'box-shadow')).toBe('none');
+    expect(getProperty(workflowShellRule, 'overflow')).toBe('visible');
+    expect(getProperty(timelineRule, 'min-height')).toBe('330px');
+    expect(getProperty(stageRule, 'position')).toBe('absolute');
+    expect(getProperty(stageRule, 'left')).toBe('var(--workflow-stage-x)');
+    expect(getProperty(nodeRule, 'top')).toBe('var(--workflow-node-y)');
+    expect(getProperty(lowerCopyRule, 'bottom')).toBe('0');
+    expect(getProperty(routeRule, 'pointer-events')).toBe('none');
+    expect(getProperty(routePathRule, 'fill')).toBe('none');
+    expect(getProperty(routePathRule, 'stroke')).toBe("url('#workflow-route-gradient')");
+    expect(routePathRule).toContain('stroke-linecap: round');
+    expect(css).toMatch(/@media \(max-width: 900px\)\s*\{[\s\S]*?\.workflow-route\s*\{[\s\S]*?display:\s*none;/);
+    expect(css).toMatch(/@media \(max-width: 900px\)\s*\{[\s\S]*?\.landing-workflow-timeline::before\s*\{[\s\S]*?display:\s*block;/);
+  });
+
   it('aligns capability labels directly under enlarged icons', () => {
     const gridRule = getRule('.capability-mark-grid');
     const markRule = getRule('.capability-mark');

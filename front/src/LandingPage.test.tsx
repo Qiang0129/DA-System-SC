@@ -1,10 +1,10 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { vi } from 'vitest';
 import { LandingPage } from './LandingPage';
 
 describe('LandingPage', () => {
   it('renders the document-based workflow content in the screenshot area', () => {
-    render(
+    const { container } = render(
       <LandingPage
         onLogin={() => undefined}
         onRegister={() => undefined}
@@ -12,8 +12,12 @@ describe('LandingPage', () => {
       />,
     );
 
+    const capabilityGrid = container.querySelector<HTMLElement>('.capability-grid');
+
+    expect(capabilityGrid).not.toBeNull();
+
     for (const title of ['数据管理', '协关联矩阵分析', '多核相似性学习', '性能评估', '可视化展示', '结果导出']) {
-      expect(screen.getByRole('heading', { name: title })).toBeInTheDocument();
+      expect(within(capabilityGrid!).getByRole('heading', { name: title })).toBeInTheDocument();
     }
 
     expect(screen.getByRole('heading', { name: '拓扑感知多核集成聚类分析系统' })).toBeInTheDocument();
@@ -35,6 +39,64 @@ describe('LandingPage', () => {
     for (const marker of markers) {
       expect(marker.querySelector('svg')).not.toBeInTheDocument();
     }
+  });
+
+  it('renders the static five-stage analysis execution timeline in order', () => {
+    render(
+      <LandingPage
+        onLogin={() => undefined}
+        onRegister={() => undefined}
+        onEnterWorkbench={() => undefined}
+      />,
+    );
+
+    const timelineSection = screen.getByRole('region', { name: '分析执行脉络' });
+    const timeline = within(timelineSection).getByRole('list', { name: '五阶段分析执行流程' });
+    const stages = within(timeline).getAllByRole('listitem');
+
+    expect(stages).toHaveLength(5);
+    expect(stages.map((stage) => stage.textContent)).toEqual([
+      expect.stringContaining('选择基础聚类结果'),
+      expect.stringContaining('GBE 编码与 CA 构建'),
+      expect.stringContaining('多核相似性学习'),
+      expect.stringContaining('谱聚类与指标评估'),
+      expect.stringContaining('结果落盘'),
+    ]);
+    expect(stages.map((stage) => stage.className)).toEqual([
+      expect.stringContaining('is-upper'),
+      expect.stringContaining('is-lower'),
+      expect.stringContaining('is-upper'),
+      expect.stringContaining('is-lower'),
+      expect.stringContaining('is-upper'),
+    ]);
+    expect(stages.map((stage) => stage.getAttribute('style'))).toEqual([
+      '--workflow-stage-x: 9%; --workflow-node-y: 90px;',
+      '--workflow-stage-x: 29.5%; --workflow-node-y: 244px;',
+      '--workflow-stage-x: 50%; --workflow-node-y: 90px;',
+      '--workflow-stage-x: 70.5%; --workflow-node-y: 244px;',
+      '--workflow-stage-x: 91%; --workflow-node-y: 90px;',
+    ]);
+    expect(within(timeline).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(timeline).queryByRole('link')).not.toBeInTheDocument();
+  });
+
+  it('renders a decorative S-shaped connector behind the five workflow stages', () => {
+    const { container } = render(
+      <LandingPage
+        onLogin={() => undefined}
+        onRegister={() => undefined}
+        onEnterWorkbench={() => undefined}
+      />,
+    );
+
+    const route = container.querySelector<SVGSVGElement>('.workflow-route[aria-hidden="true"]');
+    const routePath = route?.querySelector<SVGPathElement>('.workflow-route-path');
+
+    expect(route).not.toBeNull();
+    expect(route).toHaveAttribute('focusable', 'false');
+    expect(routePath).not.toBeNull();
+    expect(routePath).toHaveAttribute('d', expect.stringContaining('C'));
+    expect(routePath).toHaveAttribute('d', expect.stringContaining('S'));
   });
 
   it('keeps each capability label inside the matching icon item', () => {
