@@ -5695,7 +5695,9 @@
 .result-analysis-facts {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  border-block: 1px solid #e2e8ee;
+  overflow: hidden;
+  border: 1px solid #e2e8ee;
+  border-radius: 10px;
 }
 
 .result-analysis-facts div {
@@ -5708,7 +5710,6 @@
 }
 
 .result-analysis-facts div:first-child {
-  padding-left: 2px;
   border-left: 0;
 }
 
@@ -6114,13 +6115,17 @@
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(390px, 0.65fr);
-  align-items: start;
+  align-items: stretch;
   gap: 16px;
 }
 
 .result-export-history-panel,
 .result-artifact-panel {
   min-width: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: stretch;
 }
 
 .result-export-archive-list {
@@ -6201,6 +6206,7 @@
 
 .result-export-empty {
   min-height: 190px;
+  height: 100%;
   display: grid;
   place-items: center;
   align-content: center;

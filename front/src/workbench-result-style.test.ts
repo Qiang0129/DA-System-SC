@@ -45,4 +45,15 @@ describe('workbench result detail styles', () => {
     expect(dashboardRule).not.toContain(`transition: ${'margin-left'}`);
     expect(css).not.toContain(`transition: ${'width'} var(--motion-normal)`);
   });
+
+  it('keeps diagnostic facts bounded and export library panels equal height', () => {
+    const factsRule = getRule('.result-analysis-facts');
+    const libraryRule = getRule('.result-export-library');
+
+    expect(getProperty(factsRule, 'overflow')).toBe('hidden');
+    expect(getProperty(factsRule, 'border')).toBe('1px solid #e2e8ee');
+    expect(getProperty(factsRule, 'border-radius')).toBe('10px');
+    expect(getProperty(libraryRule, 'align-items')).toBe('stretch');
+    expect(css).toContain('grid-template-rows: auto minmax(0, 1fr);');
+  });
 });
