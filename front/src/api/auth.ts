@@ -60,20 +60,26 @@ export function getStoredRefreshToken() {
   return localStorage.getItem(AUTH_STORAGE_KEYS.refreshToken);
 }
 
-export function login(username: string, password: string) {
+export function login(username: string, password: string, turnstileToken: string | null = null) {
   return requestJson<AuthResponse>('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password, turnstile_token: turnstileToken }),
   });
 }
 
-export function register(username: string, password: string, confirmPassword: string) {
+export function register(
+  username: string,
+  password: string,
+  confirmPassword: string,
+  turnstileToken: string | null = null,
+) {
   return requestJson<AuthResponse>('/auth/register', {
     method: 'POST',
     body: JSON.stringify({
       username,
       password,
       confirm_password: confirmPassword,
+      turnstile_token: turnstileToken,
     }),
   });
 }

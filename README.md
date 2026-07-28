@@ -174,6 +174,21 @@ mysql -u root -p < backend/sql/schema.sql
 3. 根据本地环境修改 `DB_HOST`、`DB_PORT`、`DB_NAME`、`DB_USER`、`DB_PASSWORD`。
    该文件包含本地密码，已被 Git 忽略，不要提交到仓库。
 
+配置 Cloudflare Turnstile 人机验证：
+
+1. 在 Cloudflare 控制台创建 Turnstile widget。
+2. 开发环境域名建议加入：
+
+   ```text
+   127.0.0.1
+   localhost
+   ```
+
+3. 前端复制 `front/.env.example` 为 `front/.env`，填写 `VITE_TURNSTILE_SITE_KEY`。
+4. 后端在 `backend/config/database.env` 填写 `TURNSTILE_SECRET_KEY`。
+5. 本地不填写 `TURNSTILE_SECRET_KEY` 时，后端会跳过验证码校验；一旦填写，登录和注册接口都会强制校验 Cloudflare 返回结果。
+6. `front/.env` 和 `backend/config/database.env` 都包含本地配置或密钥，不要提交到仓库。
+
 使用虚拟环境启动：
 
 ```powershell

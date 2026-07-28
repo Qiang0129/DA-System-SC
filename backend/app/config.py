@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     )
     task_executor_enabled: bool = Field(True, validation_alias="TASK_EXECUTOR_ENABLED")
     task_poll_interval_seconds: float = Field(1.0, validation_alias="TASK_POLL_INTERVAL_SECONDS")
+    turnstile_secret_key: str = Field("", validation_alias="TURNSTILE_SECRET_KEY")
+    turnstile_verify_url: str = Field(
+        "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+        validation_alias="TURNSTILE_VERIFY_URL",
+    )
+    turnstile_timeout_seconds: float = Field(5.0, validation_alias="TURNSTILE_TIMEOUT_SECONDS")
 
     cors_origins: str = Field(
         "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174",

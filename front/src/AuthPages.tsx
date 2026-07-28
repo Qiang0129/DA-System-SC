@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ArrowLeft, LoaderCircle, LogIn, UserPlus } from 'lucide-react';
 import { login, register, saveAuthSession } from './api/auth';
+import { TURNSTILE_SITE_KEY } from './api/config';
+import { TurnstileWidget, type TurnstileWidgetHandle } from './TurnstileWidget';
 
 const AUTH_SUBMIT_FEEDBACK_MS = 260;
 
@@ -9,6 +11,7 @@ interface AuthProps {
   onSuccess: () => void;
   onSwitch: () => void;
   onBack: () => void;
+  turnstileEnabled?: boolean;
 }
 
 function waitForAuthSubmitFeedback(startedAt: number) {
@@ -59,23 +62,53 @@ function AuthField({
   );
 }
 
-function LoginCard({ onSuccess, onSwitch, onBack }: AuthProps) {
+function LoginCard({ onSuccess, onSwitch, onBack, turnstileEnabled = true }: AuthProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [turnstileToken, setTurnstileToken] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const turnstileRef = useRef<TurnstileWidgetHandle | null>(null);
+  const turnstileRequired = Boolean(TURNSTILE_SITE_KEY) && turnstileEnabled;
+
+  const handleTurnstileVerify = useCallback((token: string) => {
+    setTurnstileToken(token);
+    if (token) {
+      setError('');
+    }
+  }, []);
+
+  const handleTurnstileError = useCallback((message: string) => {
+    setTurnstileToken('');
+    setError(message);
+  }, []);
+
+  const resetTurnstile = useCallback(() => {
+    if (!turnstileRequired) {
+      return;
+    }
+    turnstileRef.current?.reset();
+    setTurnstileToken('');
+  }, [turnstileRequired]);
 
   const handleSubmit = async () => {
     const startedAt = Date.now();
     setError('');
+
+    if (turnstileRequired && !turnstileToken) {
+      setError('请先完成人机验证');
+      return;
+    }
+
     setSubmitting(true);
     try {
-      const auth = await login(username.trim(), password);
+      const auth = await login(username.trim(), password, turnstileToken || null);
       saveAuthSession(auth);
       await waitForAuthSubmitFeedback(startedAt);
       onSuccess();
     } catch (err) {
       setError(err instanceof Error ? err.message : '登录失败');
+      resetTurnstile();
     } finally {
       setSubmitting(false);
     }
@@ -110,6 +143,13 @@ function LoginCard({ onSuccess, onSwitch, onBack }: AuthProps) {
           onChange={setPassword}
           autoComplete="current-password"
         />
+        <TurnstileWidget
+          ref={turnstileRef}
+          siteKey={turnstileRequired ? TURNSTILE_SITE_KEY : ''}
+          action="login"
+          onVerify={handleTurnstileVerify}
+          onError={handleTurnstileError}
+        />
         {error ? <p className="auth-error" role="alert">{error}</p> : null}
         <button
           type="submit"
@@ -136,12 +176,35 @@ function LoginCard({ onSuccess, onSwitch, onBack }: AuthProps) {
   );
 }
 
-function RegisterCard({ onSuccess, onSwitch, onBack }: AuthProps) {
+function RegisterCard({ onSuccess, onSwitch, onBack, turnstileEnabled = true }: AuthProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [turnstileToken, setTurnstileToken] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const turnstileRef = useRef<TurnstileWidgetHandle | null>(null);
+  const turnstileRequired = Boolean(TURNSTILE_SITE_KEY) && turnstileEnabled;
+
+  const handleTurnstileVerify = useCallback((token: string) => {
+    setTurnstileToken(token);
+    if (token) {
+      setError('');
+    }
+  }, []);
+
+  const handleTurnstileError = useCallback((message: string) => {
+    setTurnstileToken('');
+    setError(message);
+  }, []);
+
+  const resetTurnstile = useCallback(() => {
+    if (!turnstileRequired) {
+      return;
+    }
+    turnstileRef.current?.reset();
+    setTurnstileToken('');
+  }, [turnstileRequired]);
 
   const handleSubmit = async () => {
     const startedAt = Date.now();
@@ -152,14 +215,20 @@ function RegisterCard({ onSuccess, onSwitch, onBack }: AuthProps) {
       return;
     }
 
+    if (turnstileRequired && !turnstileToken) {
+      setError('请先完成人机验证');
+      return;
+    }
+
     setSubmitting(true);
     try {
-      const auth = await register(username.trim(), password, confirm);
+      const auth = await register(username.trim(), password, confirm, turnstileToken || null);
       saveAuthSession(auth);
       await waitForAuthSubmitFeedback(startedAt);
       onSuccess();
     } catch (err) {
       setError(err instanceof Error ? err.message : '注册失败');
+      resetTurnstile();
     } finally {
       setSubmitting(false);
     }
@@ -202,6 +271,13 @@ function RegisterCard({ onSuccess, onSwitch, onBack }: AuthProps) {
           value={confirm}
           onChange={setConfirm}
           autoComplete="new-password"
+        />
+        <TurnstileWidget
+          ref={turnstileRef}
+          siteKey={turnstileRequired ? TURNSTILE_SITE_KEY : ''}
+          action="register"
+          onVerify={handleTurnstileVerify}
+          onError={handleTurnstileError}
         />
         {error ? <p className="auth-error" role="alert">{error}</p> : null}
         <button
@@ -302,10 +378,20 @@ export function AuthFlipCard({
       <div className={`auth-flip${flipped ? ' is-flipped' : ''}`}>
         <div className="auth-flip-inner">
           <AuthFlipFace active={!flipped} className="auth-flip-face auth-flip-front">
-            <LoginCard onSuccess={onSuccess} onSwitch={onShowRegister} onBack={onBack} />
+            <LoginCard
+              onSuccess={onSuccess}
+              onSwitch={onShowRegister}
+              onBack={onBack}
+              turnstileEnabled={!flipped}
+            />
           </AuthFlipFace>
           <AuthFlipFace active={flipped} className="auth-flip-face auth-flip-back">
-            <RegisterCard onSuccess={onSuccess} onSwitch={onShowLogin} onBack={onBack} />
+            <RegisterCard
+              onSuccess={onSuccess}
+              onSwitch={onShowLogin}
+              onBack={onBack}
+              turnstileEnabled={flipped}
+            />
           </AuthFlipFace>
         </div>
       </div>

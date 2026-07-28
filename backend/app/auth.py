@@ -25,6 +25,7 @@ from .security import (
     utc_now,
     verify_password,
 )
+from .turnstile import verify_turnstile_token
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -86,6 +87,8 @@ def get_current_user(
 
 @router.post("/register", response_model=AuthResponse)
 def register(payload: RegisterRequest, session: Session = Depends(get_session)):
+    verify_turnstile_token(payload.turnstile_token, "register")
+
     user = User(
         username=payload.username,
         password_hash=hash_password(payload.password),
@@ -113,6 +116,8 @@ def register(payload: RegisterRequest, session: Session = Depends(get_session)):
 
 @router.post("/login", response_model=AuthResponse)
 def login(payload: LoginRequest, session: Session = Depends(get_session)):
+    verify_turnstile_token(payload.turnstile_token, "login")
+
     user = get_active_user_or_401(session, payload.username, payload.password)
     user.last_login_at = utc_now()
     access_token, refresh_token = create_user_session(session, user)

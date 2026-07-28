@@ -7,6 +7,7 @@ class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=64)
     password: str = Field(min_length=6, max_length=128)
     confirm_password: str = Field(min_length=6, max_length=128)
+    turnstile_token: str | None = Field(default=None, max_length=2048)
 
     @model_validator(mode="after")
     def passwords_match(self):
@@ -18,6 +19,7 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     username: str = Field(min_length=3, max_length=64)
     password: str = Field(min_length=6, max_length=128)
+    turnstile_token: str | None = Field(default=None, max_length=2048)
 
 
 class RefreshRequest(BaseModel):
