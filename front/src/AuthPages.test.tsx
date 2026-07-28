@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 type AuthPagesModule = typeof import('./AuthPages');
 type TurnstileRenderOptions = {
   callback: (token: string) => void;
+  'error-callback': (code?: string) => void;
 };
 type TestTurnstileApi = {
   render: ReturnType<typeof vi.fn>;
@@ -23,9 +24,11 @@ async function loadAuthPages(siteKey = ''): Promise<AuthPagesModule> {
 
 function installTurnstileMock() {
   let callback: ((token: string) => void) | null = null;
+  let errorCallback: ((code?: string) => void) | null = null;
   const api: TestTurnstileApi = {
     render: vi.fn((_container: HTMLElement, options: TurnstileRenderOptions) => {
       callback = options.callback;
+      errorCallback = options['error-callback'];
       return 'widget-1';
     }),
     reset: vi.fn(),
@@ -41,6 +44,12 @@ function installTurnstileMock() {
         throw new Error('Turnstile callback has not been registered');
       }
       act(() => callback?.(token));
+    },
+    fail(code = '400020') {
+      if (!errorCallback) {
+        throw new Error('Turnstile error callback has not been registered');
+      }
+      act(() => errorCallback?.(code));
     },
   };
 }
@@ -234,6 +243,24 @@ describe('AuthPages', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('请先完成人机验证');
     expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it('shows the Turnstile error code when widget verification fails', async () => {
+    const { LoginPage } = await loadAuthPages('site-key');
+    const turnstile = installTurnstileMock();
+
+    render(
+      <LoginPage
+        onSuccess={() => undefined}
+        onSwitch={() => undefined}
+        onBack={() => undefined}
+      />,
+    );
+
+    await waitFor(() => expect(turnstile.api.render).toHaveBeenCalledTimes(1));
+    turnstile.fail('400020');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('错误码：400020');
   });
 
   it('submits the Turnstile token with login credentials', async () => {

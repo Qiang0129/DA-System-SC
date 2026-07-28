@@ -12,7 +12,7 @@ type TurnstileRenderOptions = {
   theme: 'light';
   callback: (token: string) => void;
   'expired-callback': () => void;
-  'error-callback': () => void;
+  'error-callback': (code?: string) => void;
   'timeout-callback': () => void;
 };
 
@@ -136,9 +136,10 @@ export const TurnstileWidget = forwardRef<TurnstileWidgetHandle, TurnstileWidget
               onVerify('');
               onError('人机验证已过期，请重新验证');
             },
-            'error-callback'() {
+            'error-callback'(code) {
               onVerify('');
-              onError('人机验证失败，请重新尝试');
+              setStatus('failed');
+              onError(code ? `人机验证失败，请重新尝试（错误码：${code}）` : '人机验证失败，请重新尝试');
             },
             'timeout-callback'() {
               onVerify('');
