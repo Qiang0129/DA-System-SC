@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ArrowLeft, LoaderCircle, LogIn, UserPlus } from 'lucide-react';
-import { login, register, saveAuthSession } from './api/auth';
+import { ArrowLeft, LoaderCircle, LogIn, MailCheck, UserPlus } from 'lucide-react';
+import { login, register, saveAuthSession, sendRegisterEmailCode } from './api/auth';
 import { TURNSTILE_SITE_KEY } from './api/config';
 import { TurnstileWidget, type TurnstileWidgetHandle } from './TurnstileWidget';
 
@@ -120,6 +120,7 @@ function LoginCard({ onSuccess, onSwitch, onBack, turnstileEnabled = true }: Aut
       <p className="auth-card-subtitle">登录到 OMELET Lab</p>
       <form
         className="auth-form"
+        noValidate
         onSubmit={async (e) => {
           e.preventDefault();
           await handleSubmit();
@@ -128,7 +129,7 @@ function LoginCard({ onSuccess, onSwitch, onBack, turnstileEnabled = true }: Aut
         <AuthField
           id="login-username"
           name="username"
-          label="用户名"
+          label="用户名或邮箱"
           type="text"
           value={username}
           onChange={setUsername}
@@ -178,10 +179,15 @@ function LoginCard({ onSuccess, onSwitch, onBack, turnstileEnabled = true }: Aut
 
 function RegisterCard({ onSuccess, onSwitch, onBack, turnstileEnabled = true }: AuthProps) {
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [emailCode, setEmailCode] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [sendingEmailCode, setSendingEmailCode] = useState(false);
+  const [emailCodeCooldown, setEmailCodeCooldown] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const turnstileRef = useRef<TurnstileWidgetHandle | null>(null);
   const turnstileRequired = Boolean(TURNSTILE_SITE_KEY) && turnstileEnabled;
@@ -206,12 +212,24 @@ function RegisterCard({ onSuccess, onSwitch, onBack, turnstileEnabled = true }: 
     setTurnstileToken('');
   }, [turnstileRequired]);
 
-  const handleSubmit = async () => {
-    const startedAt = Date.now();
-    setError('');
+  useEffect(() => {
+    if (emailCodeCooldown <= 0) {
+      return undefined;
+    }
 
-    if (password !== confirm) {
-      setError('两次密码不一致');
+    const timer = window.setInterval(() => {
+      setEmailCodeCooldown((current) => Math.max(current - 1, 0));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [emailCodeCooldown]);
+
+  const handleSendEmailCode = async () => {
+    setError('');
+    setNotice('');
+
+    if (!email.trim()) {
+      setError('请先填写邮箱');
       return;
     }
 
@@ -220,9 +238,43 @@ function RegisterCard({ onSuccess, onSwitch, onBack, turnstileEnabled = true }: 
       return;
     }
 
+    setSendingEmailCode(true);
+    try {
+      await sendRegisterEmailCode(email.trim(), turnstileToken || null);
+      setNotice('验证码已发送，请查看邮箱');
+      setEmailCodeCooldown(60);
+      resetTurnstile();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '验证码发送失败');
+      resetTurnstile();
+    } finally {
+      setSendingEmailCode(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    const startedAt = Date.now();
+    setError('');
+    setNotice('');
+
+    if (password !== confirm) {
+      setError('两次密码不一致');
+      return;
+    }
+
+    if (!email.trim()) {
+      setError('请先填写邮箱');
+      return;
+    }
+
+    if (!emailCode.trim()) {
+      setError('请填写邮箱验证码');
+      return;
+    }
+
     setSubmitting(true);
     try {
-      const auth = await register(username.trim(), password, confirm, turnstileToken || null);
+      const auth = await register(username.trim(), email.trim(), password, confirm, emailCode.trim());
       saveAuthSession(auth);
       await waitForAuthSubmitFeedback(startedAt);
       onSuccess();
@@ -240,6 +292,7 @@ function RegisterCard({ onSuccess, onSwitch, onBack, turnstileEnabled = true }: 
       <p className="auth-card-subtitle">创建 OMELET Lab 账号</p>
       <form
         className="auth-form"
+        noValidate
         onSubmit={async (e) => {
           e.preventDefault();
           await handleSubmit();
@@ -253,6 +306,15 @@ function RegisterCard({ onSuccess, onSwitch, onBack, turnstileEnabled = true }: 
           value={username}
           onChange={setUsername}
           autoComplete="username"
+        />
+        <AuthField
+          id="register-email"
+          name="email"
+          label="邮箱"
+          type="email"
+          value={email}
+          onChange={setEmail}
+          autoComplete="email"
         />
         <AuthField
           id="register-password"
@@ -279,6 +341,32 @@ function RegisterCard({ onSuccess, onSwitch, onBack, turnstileEnabled = true }: 
           onVerify={handleTurnstileVerify}
           onError={handleTurnstileError}
         />
+        <div className="auth-code-row">
+          <AuthField
+            id="register-email-code"
+            name="emailCode"
+            label="邮箱验证码"
+            type="text"
+            value={emailCode}
+            onChange={setEmailCode}
+            autoComplete="one-time-code"
+          />
+          <button
+            type="button"
+            className="auth-code-button"
+            disabled={sendingEmailCode || emailCodeCooldown > 0}
+            aria-busy={sendingEmailCode}
+            onClick={handleSendEmailCode}
+          >
+            {sendingEmailCode ? (
+              <LoaderCircle className="auth-submit-spinner" size={15} aria-hidden="true" />
+            ) : (
+              <MailCheck size={15} aria-hidden="true" />
+            )}
+            {emailCodeCooldown > 0 ? `${emailCodeCooldown}s` : '发送验证码'}
+          </button>
+        </div>
+        {notice ? <p className="auth-notice" role="status">{notice}</p> : null}
         {error ? <p className="auth-error" role="alert">{error}</p> : null}
         <button
           type="submit"

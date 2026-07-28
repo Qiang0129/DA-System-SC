@@ -29,6 +29,35 @@ app.include_router(datasets_router)
 app.include_router(tasks_router)
 
 
+def ensure_user_email_column() -> None:
+    """兼容旧库：create_all 不会修改已有表，这里只补邮箱登录需要的字段和唯一索引。"""
+    inspector = inspect(engine)
+    if "users" not in inspector.get_table_names():
+        return
+
+    dialect = engine.dialect.name
+    existing = {column["name"] for column in inspector.get_columns("users")}
+    if "email" not in existing:
+        column_type = "VARCHAR(255) NULL" if dialect != "sqlite" else "VARCHAR(255)"
+        with engine.begin() as conn:
+            conn.execute(text(f"ALTER TABLE users ADD COLUMN email {column_type}"))
+
+    inspector = inspect(engine)
+    indexes = inspector.get_indexes("users")
+    unique_constraints = inspector.get_unique_constraints("users")
+    has_email_unique = any(index.get("unique") and index.get("column_names") == ["email"] for index in indexes) or any(
+        constraint.get("column_names") == ["email"] for constraint in unique_constraints
+    )
+    if has_email_unique:
+        return
+
+    with engine.begin() as conn:
+        if dialect == "sqlite":
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email ON users (email)"))
+        else:
+            conn.execute(text("CREATE UNIQUE INDEX ix_users_email ON users (email)"))
+
+
 def ensure_analysis_task_columns() -> None:
     """兼容旧库：为 analysis_tasks 补齐任务中心新增字段。"""
     inspector = inspect(engine)
@@ -87,6 +116,7 @@ def ensure_analysis_task_columns() -> None:
 def create_extension_tables():
     # 新增的数据集版本、质量和任务表通过 SQLAlchemy 元数据创建，既有数据集表不会被改写。
     Base.metadata.create_all(bind=engine)
+    ensure_user_email_column()
     ensure_analysis_task_columns()
     # pytest 使用独立内存库和依赖覆盖，不启动后台线程以免触碰本地开发数据库。
     if "pytest" not in sys.modules:

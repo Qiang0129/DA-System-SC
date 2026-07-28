@@ -1021,7 +1021,7 @@
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 380px;
+  max-width: 420px;
   perspective: 1600px;
 }
 
@@ -1061,8 +1061,8 @@
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 380px;
-  padding: 32px;
+  max-width: 420px;
+  padding: 24px 32px;
   border: none;
   border-radius: 16px;
   background:
@@ -1083,7 +1083,7 @@
 }
 
 .auth-card-subtitle {
-  margin: 0 0 24px;
+  margin: 0 0 18px;
   text-align: center;
   color: rgba(71, 85, 105, 0.74);
   font-size: 13px;
@@ -1092,7 +1092,7 @@
 .auth-form {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
 
 .auth-field {
@@ -1109,7 +1109,7 @@
 
 .auth-input {
   width: 100%;
-  height: 44px;
+  height: 40px;
   padding: 0 14px;
   border: 1px solid var(--app-border-strong);
   border-radius: 999px;
@@ -1131,14 +1131,14 @@
 
 .auth-turnstile {
   position: relative;
-  min-height: 70px;
+  min-height: 60px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .auth-turnstile-shell {
-  min-height: 65px;
+  min-height: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1162,9 +1162,57 @@
   color: #b91c1c;
 }
 
+.auth-code-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 122px;
+  align-items: end;
+  gap: 10px;
+}
+
+.auth-code-button {
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid rgba(64, 158, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(64, 158, 255, 0.12);
+  color: #245f9f;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.auth-code-button:not(:disabled):hover,
+.auth-code-button:not(:disabled):focus-visible {
+  background: rgba(64, 158, 255, 0.18);
+  box-shadow: 0 10px 22px -16px rgba(37, 99, 235, 0.68);
+  transform: translateY(-1px);
+}
+
+.auth-code-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
+.auth-notice {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(34, 197, 94, 0.12);
+  color: #15803d;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .auth-error {
   margin: 0;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border-radius: 10px;
   background: rgba(239, 68, 68, 0.1);
   color: #b91c1c;
@@ -1173,8 +1221,8 @@
 }
 
 .auth-submit {
-  min-height: 46px;
-  height: 46px;
+  min-height: 44px;
+  height: 44px;
   width: 100%;
   margin-top: 4px;
   padding: 0 16px;
@@ -1220,7 +1268,7 @@
 }
 
 .auth-switch {
-  margin: 18px 0 0;
+  margin: 10px 0 0;
   text-align: center;
   font-size: 13px;
   color: rgba(71, 85, 105, 0.72);
@@ -1244,7 +1292,7 @@
 
 .auth-back {
   display: block;
-  margin-top: 14px;
+  margin-top: 8px;
   text-align: center;
   border: 0;
   background: transparent;
@@ -1508,11 +1556,14 @@
   }
 
   .auth-submit,
+  .auth-code-button,
   .auth-submit-spinner {
     transition: none;
     animation: none;
   }
 
+  .auth-code-button:not(:disabled):hover,
+  .auth-code-button:not(:disabled):focus-visible,
   .auth-submit:not(:disabled):hover,
   .auth-submit:not(:disabled):focus-visible,
   .auth-submit:not(:disabled):active {

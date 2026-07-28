@@ -73,6 +73,7 @@ def test_register_login_me_and_logout_flow():
         "/api/auth/register",
         json={
             "username": "alice",
+            "email": "Alice@example.com",
             "password": "secret123",
             "confirm_password": "secret123",
         },
@@ -81,6 +82,7 @@ def test_register_login_me_and_logout_flow():
     assert register_response.status_code == 200
     register_body = register_response.json()
     assert register_body["user"]["username"] == "alice"
+    assert register_body["user"]["email"] == "alice@example.com"
     assert register_body["user"]["role"] == "user"
     assert register_body["access_token"]
     assert register_body["refresh_token"]
@@ -89,11 +91,23 @@ def test_register_login_me_and_logout_flow():
         "/api/auth/register",
         json={
             "username": "alice",
+            "email": "alice2@example.com",
             "password": "secret123",
             "confirm_password": "secret123",
         },
     )
     assert duplicate_response.status_code == 409
+
+    duplicate_email_response = client.post(
+        "/api/auth/register",
+        json={
+            "username": "bob",
+            "email": "alice@example.com",
+            "password": "secret123",
+            "confirm_password": "secret123",
+        },
+    )
+    assert duplicate_email_response.status_code == 409
 
     bad_login_response = client.post(
         "/api/auth/login",
@@ -103,7 +117,7 @@ def test_register_login_me_and_logout_flow():
 
     login_response = client.post(
         "/api/auth/login",
-        json={"username": "alice", "password": "secret123"},
+        json={"username": "alice@example.com", "password": "secret123"},
     )
     assert login_response.status_code == 200
     login_body = login_response.json()
@@ -135,16 +149,67 @@ def test_register_login_me_and_logout_flow():
     assert revoked_refresh_response.status_code == 401
 
 
+def test_email_verification_register_flow_and_login_by_email(monkeypatch):
+    from app import auth, email_verification
+
+    base_settings = auth.get_settings()
+
+    class EmailRequiredSettings:
+        email_verification_required = True
+
+        def __getattr__(self, name: str):
+            return getattr(base_settings, name)
+
+    sent_codes: list[tuple[str, str]] = []
+    monkeypatch.setattr(auth, "get_settings", lambda: EmailRequiredSettings())
+    monkeypatch.setattr(email_verification, "generate_email_code", lambda: "123456")
+    monkeypatch.setattr(email_verification, "send_email_code", lambda email, code: sent_codes.append((email, code)))
+    client = make_test_client()
+
+    code_response = client.post(
+        "/api/auth/register/email-code",
+        json={"email": "Alice@Example.com"},
+    )
+
+    assert code_response.status_code == 200
+    assert code_response.json()["message"] == "验证码已发送"
+    assert sent_codes == [("alice@example.com", "123456")]
+
+    register_response = client.post(
+        "/api/auth/register",
+        json={
+            "username": "alice",
+            "email": "Alice@Example.com",
+            "password": "secret123",
+            "confirm_password": "secret123",
+            "email_code": "123456",
+        },
+    )
+
+    assert register_response.status_code == 200
+    assert register_response.json()["user"]["email"] == "alice@example.com"
+
+    login_response = client.post(
+        "/api/auth/login",
+        json={"username": "alice@example.com", "password": "secret123"},
+    )
+    assert login_response.status_code == 200
+
+    duplicate_code_response = client.post(
+        "/api/auth/register/email-code",
+        json={"email": "alice@example.com"},
+    )
+    assert duplicate_code_response.status_code == 409
+
+
 def test_turnstile_secret_requires_token(monkeypatch):
     enable_turnstile(monkeypatch)
     client = make_test_client()
 
     response = client.post(
-        "/api/auth/register",
+        "/api/auth/register/email-code",
         json={
-            "username": "alice",
-            "password": "secret123",
-            "confirm_password": "secret123",
+            "email": "alice@example.com",
         },
     )
 
@@ -153,22 +218,26 @@ def test_turnstile_secret_requires_token(monkeypatch):
     assert FakeTurnstileClient.requests == []
 
 
-def test_turnstile_success_allows_register(monkeypatch):
+def test_turnstile_success_allows_email_code_send(monkeypatch):
+    from app import email_verification
+
     enable_turnstile(monkeypatch, {"success": True, "action": "register"})
+    sent_codes: list[tuple[str, str]] = []
+    monkeypatch.setattr(email_verification, "generate_email_code", lambda: "123456")
+    monkeypatch.setattr(email_verification, "send_email_code", lambda email, code: sent_codes.append((email, code)))
     client = make_test_client()
 
     response = client.post(
-        "/api/auth/register",
+        "/api/auth/register/email-code",
         json={
-            "username": "alice",
-            "password": "secret123",
-            "confirm_password": "secret123",
+            "email": "alice@example.com",
             "turnstile_token": "cf-token",
         },
     )
 
     assert response.status_code == 200
-    assert response.json()["user"]["username"] == "alice"
+    assert response.json()["message"] == "验证码已发送"
+    assert sent_codes == [("alice@example.com", "123456")]
     assert FakeTurnstileClient.requests == [
         {
             "url": TurnstileSettings.turnstile_verify_url,
@@ -188,7 +257,6 @@ def test_turnstile_success_allows_login(monkeypatch):
             "username": "alice",
             "password": "secret123",
             "confirm_password": "secret123",
-            "turnstile_token": "register-token",
         },
     )
     assert register_response.status_code == 200
@@ -217,11 +285,9 @@ def test_turnstile_rejects_failed_response(monkeypatch):
     client = make_test_client()
 
     response = client.post(
-        "/api/auth/register",
+        "/api/auth/register/email-code",
         json={
-            "username": "alice",
-            "password": "secret123",
-            "confirm_password": "secret123",
+            "email": "alice@example.com",
             "turnstile_token": "bad-token",
         },
     )
@@ -235,11 +301,9 @@ def test_turnstile_rejects_action_mismatch(monkeypatch):
     client = make_test_client()
 
     response = client.post(
-        "/api/auth/register",
+        "/api/auth/register/email-code",
         json={
-            "username": "alice",
-            "password": "secret123",
-            "confirm_password": "secret123",
+            "email": "alice@example.com",
             "turnstile_token": "cf-token",
         },
     )
@@ -253,11 +317,9 @@ def test_turnstile_service_error_fails_closed(monkeypatch):
     client = make_test_client()
 
     response = client.post(
-        "/api/auth/register",
+        "/api/auth/register/email-code",
         json={
-            "username": "alice",
-            "password": "secret123",
-            "confirm_password": "secret123",
+            "email": "alice@example.com",
             "turnstile_token": "cf-token",
         },
     )

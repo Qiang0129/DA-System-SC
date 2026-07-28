@@ -87,7 +87,7 @@ describe('AuthPages', () => {
       />,
     );
 
-    await user.type(screen.getByLabelText('用户名'), 'alice');
+    await user.type(screen.getByLabelText('用户名或邮箱'), 'alice@example.com');
     await user.type(screen.getByLabelText('密码'), 'secret123');
     const submit = screen.getByRole('button', { name: '登录' });
 
@@ -103,7 +103,7 @@ describe('AuthPages', () => {
       expect.objectContaining({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: 'alice', password: 'secret123', turnstile_token: null }),
+        body: JSON.stringify({ username: 'alice@example.com', password: 'secret123', turnstile_token: null }),
       }),
     );
     expect(localStorage.getItem('soft_web_access_token')).toBe('access-token');
@@ -132,8 +132,10 @@ describe('AuthPages', () => {
     );
 
     await user.type(screen.getByLabelText('用户名'), 'bob');
+    await user.type(screen.getByLabelText('邮箱'), 'bob@example.com');
     await user.type(screen.getByLabelText('密码'), 'secret123');
     await user.type(screen.getByLabelText('确认密码'), 'secret123');
+    await user.type(screen.getByLabelText('邮箱验证码'), '123456');
     const submit = screen.getByRole('button', { name: '注册' });
 
     await user.click(submit);
@@ -147,10 +149,41 @@ describe('AuthPages', () => {
       expect.objectContaining({
         body: JSON.stringify({
           username: 'bob',
+          email: 'bob@example.com',
           password: 'secret123',
           confirm_password: 'secret123',
-          turnstile_token: null,
+          email_code: '123456',
         }),
+      }),
+    );
+  });
+
+  it('sends a register email code before account creation', async () => {
+    const { RegisterPage } = await loadAuthPages();
+    const user = userEvent.setup();
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ message: '验证码已发送' }),
+    } as Response);
+
+    render(
+      <RegisterPage
+        onSuccess={() => undefined}
+        onSwitch={() => undefined}
+        onBack={() => undefined}
+      />,
+    );
+
+    await user.type(screen.getByLabelText('邮箱'), 'bob@example.com');
+    await user.click(screen.getByRole('button', { name: '发送验证码' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('验证码已发送，请查看邮箱');
+    expect(screen.getByRole('button', { name: '60s' })).toBeDisabled();
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringMatching(/\/api\/auth\/register\/email-code$/),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ email: 'bob@example.com', turnstile_token: null }),
       }),
     );
   });
@@ -168,7 +201,7 @@ describe('AuthPages', () => {
       />,
     );
 
-    await user.type(screen.getByLabelText('用户名'), 'alice');
+    await user.type(screen.getByLabelText('用户名或邮箱'), 'alice');
     await user.type(screen.getByLabelText('密码'), 'secret123');
     const submit = screen.getByRole('button', { name: '登录' });
 
@@ -195,7 +228,7 @@ describe('AuthPages', () => {
     );
 
     await waitFor(() => expect(turnstile.api.render).toHaveBeenCalledTimes(1));
-    await user.type(screen.getByLabelText('用户名'), 'alice');
+    await user.type(screen.getByLabelText('用户名或邮箱'), 'alice');
     await user.type(screen.getByLabelText('密码'), 'secret123');
     await user.click(screen.getByRole('button', { name: '登录' }));
 
@@ -227,7 +260,7 @@ describe('AuthPages', () => {
 
     await waitFor(() => expect(turnstile.api.render).toHaveBeenCalledTimes(1));
     turnstile.verify('cf-token');
-    await user.type(screen.getByLabelText('用户名'), 'alice');
+    await user.type(screen.getByLabelText('用户名或邮箱'), 'alice');
     await user.type(screen.getByLabelText('密码'), 'secret123');
     await user.click(screen.getByRole('button', { name: '登录' }));
 
@@ -260,7 +293,7 @@ describe('AuthPages', () => {
 
     await waitFor(() => expect(turnstile.api.render).toHaveBeenCalledTimes(1));
     turnstile.verify('cf-token');
-    await user.type(screen.getByLabelText('用户名'), 'alice');
+    await user.type(screen.getByLabelText('用户名或邮箱'), 'alice');
     await user.type(screen.getByLabelText('密码'), 'secret123');
     await user.click(screen.getByRole('button', { name: '登录' }));
 
@@ -321,8 +354,10 @@ describe('AuthPages', () => {
     );
 
     await user.type(screen.getByLabelText('用户名'), 'alice');
+    await user.type(screen.getByLabelText('邮箱'), 'alice@example.com');
     await user.type(screen.getByLabelText('密码'), 'secret123');
     await user.type(screen.getByLabelText('确认密码'), 'different');
+    await user.type(screen.getByLabelText('邮箱验证码'), '123456');
     await user.click(screen.getByRole('button', { name: '注册' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('两次密码不一致');

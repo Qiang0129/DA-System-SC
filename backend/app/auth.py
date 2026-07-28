@@ -1,16 +1,24 @@
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .database import get_session
+from .email_verification import (
+    create_register_email_code,
+    ensure_email_not_registered,
+    normalize_email,
+    try_normalize_email,
+    verify_register_email_code,
+)
 from .models import User, UserSession
 from .schemas import (
     AccessTokenResponse,
     AuthResponse,
+    EmailCodeRequest,
     LoginRequest,
     MessageResponse,
     RefreshRequest,
@@ -34,8 +42,18 @@ def get_user_by_username(session: Session, username: str) -> User | None:
     return session.scalar(select(User).where(User.username == username))
 
 
-def get_active_user_or_401(session: Session, username: str, password: str) -> User:
-    user = get_user_by_username(session, username)
+def get_user_by_login_identifier(session: Session, identifier: str) -> User | None:
+    normalized_email = try_normalize_email(identifier)
+    if normalized_email is not None:
+        user = session.scalar(select(User).where(User.email == normalized_email))
+        if user is not None:
+            return user
+
+    return get_user_by_username(session, identifier.strip())
+
+
+def get_active_user_or_401(session: Session, identifier: str, password: str) -> User:
+    user = get_user_by_login_identifier(session, identifier)
     if not user or user.status != "active" or not verify_password(password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -68,6 +86,26 @@ def parse_bearer_token(authorization: str | None) -> str:
     return token
 
 
+@router.post("/register/email-code", response_model=MessageResponse)
+def send_register_email_code(
+    payload: EmailCodeRequest,
+    request: Request,
+    session: Session = Depends(get_session),
+):
+    verify_turnstile_token(payload.turnstile_token, "register")
+
+    email = normalize_email(payload.email)
+    client_ip = request.client.host if request.client else None
+    try:
+        create_register_email_code(session, email, client_ip)
+        session.commit()
+    except HTTPException:
+        session.rollback()
+        raise
+
+    return MessageResponse(message="验证码已发送")
+
+
 def get_current_user(
     authorization: str | None = Header(default=None),
     session: Session = Depends(get_session),
@@ -87,10 +125,23 @@ def get_current_user(
 
 @router.post("/register", response_model=AuthResponse)
 def register(payload: RegisterRequest, session: Session = Depends(get_session)):
-    verify_turnstile_token(payload.turnstile_token, "register")
+    settings = get_settings()
+    email: str | None = None
+    email_code_record = None
+
+    if settings.email_verification_required:
+        if payload.email is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请填写邮箱")
+        email = normalize_email(payload.email)
+        ensure_email_not_registered(session, email)
+        email_code_record = verify_register_email_code(session, email, payload.email_code)
+    elif payload.email:
+        email = normalize_email(payload.email)
+        ensure_email_not_registered(session, email)
 
     user = User(
         username=payload.username,
+        email=email,
         password_hash=hash_password(payload.password),
         role="user",
         status="active",
@@ -100,9 +151,12 @@ def register(payload: RegisterRequest, session: Session = Depends(get_session)):
         session.flush()
     except IntegrityError as exc:
         session.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="用户名已存在") from exc
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="用户名或邮箱已存在") from exc
 
     user.last_login_at = utc_now()
+    if email_code_record is not None:
+        email_code_record.consumed_at = utc_now()
+
     access_token, refresh_token = create_user_session(session, user)
     session.commit()
     session.refresh(user)

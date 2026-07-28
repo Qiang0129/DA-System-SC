@@ -20,6 +20,7 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(IDENTIFIER_TYPE, primary_key=True, autoincrement=True)
     username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    email: Mapped[str | None] = mapped_column(String(255), unique=True, index=True, nullable=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(32), default="user")
     status: Mapped[str] = mapped_column(String(32), default="active", index=True)
@@ -33,6 +34,21 @@ class User(Base):
 
     sessions: Mapped[list["UserSession"]] = relationship(back_populates="user")
     datasets: Mapped[list["Dataset"]] = relationship(back_populates="user")
+
+
+class EmailVerificationCode(Base):
+    """邮箱验证码只保存哈希值，避免数据库泄漏时暴露仍在有效期内的明文验证码。"""
+
+    __tablename__ = "email_verification_codes"
+
+    id: Mapped[int] = mapped_column(IDENTIFIER_TYPE, primary_key=True, autoincrement=True)
+    email: Mapped[str] = mapped_column(String(255), index=True)
+    purpose: Mapped[str] = mapped_column(String(32), default="register", index=True)
+    code_hash: Mapped[str] = mapped_column(String(255))
+    client_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
 
 
 class UserSession(Base):

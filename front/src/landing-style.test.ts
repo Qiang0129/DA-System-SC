@@ -188,7 +188,7 @@ describe('landing URL copy button styles', () => {
     const reducedMotion = getReducedMotionBlock();
 
     expect(getProperty(submitRule, 'border-radius')).toBe('8px');
-    expect(getProperty(submitRule, 'min-height')).toBe('46px');
+    expect(getProperty(submitRule, 'min-height')).toBe('44px');
     expect(getProperty(submitRule, 'transition') ?? '').toContain('transform 180ms');
     expect(getProperty(activeRule, 'transform')).toBe('translateY(1px) scale(0.985)');
     expect(getProperty(spinnerRule, 'animation')).toBe('auth-submit-spin 720ms linear infinite');

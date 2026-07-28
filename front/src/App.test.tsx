@@ -349,7 +349,7 @@ async function signInFromLanding() {
   await user.click(screen.getByRole('button', { name: '登录' }));
   const loginCard = getAuthCard('登录');
 
-  await user.type(loginCard.getByLabelText('用户名'), 'alice');
+  await user.type(loginCard.getByLabelText('用户名或邮箱'), 'alice');
   await user.type(loginCard.getByLabelText('密码'), 'secret123');
   await user.click(loginCard.getByRole('button', { name: '登录' }));
 

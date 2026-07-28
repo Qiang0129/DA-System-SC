@@ -3,6 +3,7 @@ import { API_BASE_URL } from './config';
 export type AuthUser = {
   id: number;
   username: string;
+  email?: string | null;
   role: string;
   status: string;
   last_login_at?: string | null;
@@ -67,19 +68,28 @@ export function login(username: string, password: string, turnstileToken: string
   });
 }
 
+export function sendRegisterEmailCode(email: string, turnstileToken: string | null = null) {
+  return requestJson<{ message: string }>('/auth/register/email-code', {
+    method: 'POST',
+    body: JSON.stringify({ email, turnstile_token: turnstileToken }),
+  });
+}
+
 export function register(
   username: string,
+  email: string,
   password: string,
   confirmPassword: string,
-  turnstileToken: string | null = null,
+  emailCode: string,
 ) {
   return requestJson<AuthResponse>('/auth/register', {
     method: 'POST',
     body: JSON.stringify({
       username,
+      email,
       password,
       confirm_password: confirmPassword,
-      turnstile_token: turnstileToken,
+      email_code: emailCode,
     }),
   });
 }

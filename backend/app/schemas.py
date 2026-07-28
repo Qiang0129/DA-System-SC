@@ -5,8 +5,10 @@ from pydantic import BaseModel, Field, model_validator
 
 class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=64)
+    email: str | None = Field(default=None, max_length=255)
     password: str = Field(min_length=6, max_length=128)
     confirm_password: str = Field(min_length=6, max_length=128)
+    email_code: str | None = Field(default=None, min_length=6, max_length=6)
     turnstile_token: str | None = Field(default=None, max_length=2048)
 
     @model_validator(mode="after")
@@ -16,8 +18,13 @@ class RegisterRequest(BaseModel):
         return self
 
 
+class EmailCodeRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=255)
+    turnstile_token: str | None = Field(default=None, max_length=2048)
+
+
 class LoginRequest(BaseModel):
-    username: str = Field(min_length=3, max_length=64)
+    username: str = Field(min_length=3, max_length=255)
     password: str = Field(min_length=6, max_length=128)
     turnstile_token: str | None = Field(default=None, max_length=2048)
 
@@ -29,6 +36,7 @@ class RefreshRequest(BaseModel):
 class UserResponse(BaseModel):
     id: int
     username: str
+    email: str | None = None
     role: str
     status: str
     last_login_at: datetime | None = None

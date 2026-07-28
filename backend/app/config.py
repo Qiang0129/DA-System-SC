@@ -41,6 +41,17 @@ class Settings(BaseSettings):
         validation_alias="TURNSTILE_VERIFY_URL",
     )
     turnstile_timeout_seconds: float = Field(5.0, validation_alias="TURNSTILE_TIMEOUT_SECONDS")
+    email_verification_required: bool = Field(True, validation_alias="EMAIL_VERIFICATION_REQUIRED")
+    email_code_expire_minutes: int = Field(10, validation_alias="EMAIL_CODE_EXPIRE_MINUTES")
+    email_code_resend_cooldown_seconds: int = Field(60, validation_alias="EMAIL_CODE_RESEND_COOLDOWN_SECONDS")
+    smtp_host: str = Field("smtp.qq.com", validation_alias="SMTP_HOST")
+    smtp_port: int = Field(465, validation_alias="SMTP_PORT")
+    smtp_username: str = Field("", validation_alias="SMTP_USERNAME")
+    smtp_password: str = Field("", validation_alias="SMTP_PASSWORD")
+    smtp_from_email: str = Field("", validation_alias="SMTP_FROM_EMAIL")
+    smtp_from_name: str = Field("OMELET Lab", validation_alias="SMTP_FROM_NAME")
+    smtp_use_ssl: bool = Field(True, validation_alias="SMTP_USE_SSL")
+    smtp_timeout_seconds: float = Field(10.0, validation_alias="SMTP_TIMEOUT_SECONDS")
 
     cors_origins: str = Field(
         "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174",
