@@ -16,6 +16,14 @@ export type AuthResponse = {
   token_type: string;
 };
 
+export type TurnstileAction = 'login' | 'register';
+
+export type TurnstilePassResponse = {
+  turnstile_pass_token: string;
+  expires_at: string;
+  expires_in_seconds: number;
+};
+
 export const AUTH_STORAGE_KEYS = {
   accessToken: 'soft_web_access_token',
   refreshToken: 'soft_web_refresh_token',
@@ -61,17 +69,58 @@ export function getStoredRefreshToken() {
   return localStorage.getItem(AUTH_STORAGE_KEYS.refreshToken);
 }
 
-export function login(username: string, password: string, turnstileToken: string | null = null) {
-  return requestJson<AuthResponse>('/auth/login', {
+function buildTurnstilePayload(
+  turnstileToken: string | null,
+  turnstilePassToken: string | null,
+) {
+  const payload: {
+    turnstile_token: string | null;
+    turnstile_pass_token?: string;
+  } = {
+    turnstile_token: turnstilePassToken ? null : turnstileToken,
+  };
+
+  if (turnstilePassToken) {
+    payload.turnstile_pass_token = turnstilePassToken;
+  }
+
+  return payload;
+}
+
+export function createTurnstilePass(turnstileToken: string, action: TurnstileAction) {
+  return requestJson<TurnstilePassResponse>('/auth/turnstile-pass', {
     method: 'POST',
-    body: JSON.stringify({ username, password, turnstile_token: turnstileToken }),
+    body: JSON.stringify({ turnstile_token: turnstileToken, action }),
   });
 }
 
-export function sendRegisterEmailCode(email: string, turnstileToken: string | null = null) {
+export function login(
+  username: string,
+  password: string,
+  turnstileToken: string | null = null,
+  turnstilePassToken: string | null = null,
+) {
+  return requestJson<AuthResponse>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({
+      username,
+      password,
+      ...buildTurnstilePayload(turnstileToken, turnstilePassToken),
+    }),
+  });
+}
+
+export function sendRegisterEmailCode(
+  email: string,
+  turnstileToken: string | null = null,
+  turnstilePassToken: string | null = null,
+) {
   return requestJson<{ message: string }>('/auth/register/email-code', {
     method: 'POST',
-    body: JSON.stringify({ email, turnstile_token: turnstileToken }),
+    body: JSON.stringify({
+      email,
+      ...buildTurnstilePayload(turnstileToken, turnstilePassToken),
+    }),
   });
 }
 

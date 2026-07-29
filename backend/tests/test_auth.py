@@ -1,5 +1,8 @@
+from datetime import timedelta
+
 import httpx
 from fastapi.testclient import TestClient
+from jose import jwt
 
 from app.database import Base, get_session, make_engine, make_session_factory
 from main import app
@@ -64,6 +67,13 @@ def enable_turnstile(monkeypatch, payload: dict | None = None, error: Exception 
     FakeTurnstileClient.error = error
     monkeypatch.setattr(turnstile, "get_settings", lambda: TurnstileSettings())
     monkeypatch.setattr(turnstile.httpx, "Client", FakeTurnstileClient)
+
+
+def make_invalid_turnstile_pass(payload: dict) -> str:
+    from app import security
+
+    settings = security.get_settings()
+    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
 def test_register_login_me_and_logout_flow():
@@ -278,6 +288,157 @@ def test_turnstile_success_allows_login(monkeypatch):
         "secret": "test-secret",
         "response": "login-token",
     }
+
+
+def test_turnstile_pass_exchange_returns_short_lived_token(monkeypatch):
+    enable_turnstile(monkeypatch, {"success": True, "action": "login"})
+    client = make_test_client()
+
+    response = client.post(
+        "/api/auth/turnstile-pass",
+        json={
+            "turnstile_token": "login-token",
+            "action": "login",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["turnstile_pass_token"]
+    assert body["expires_at"]
+    assert 1 <= body["expires_in_seconds"] <= 300
+    assert FakeTurnstileClient.requests == [
+        {
+            "url": TurnstileSettings.turnstile_verify_url,
+            "data": {"secret": "test-secret", "response": "login-token"},
+            "timeout": TurnstileSettings.turnstile_timeout_seconds,
+        },
+    ]
+
+
+def test_login_turnstile_pass_can_cover_login_and_register_email_code(monkeypatch):
+    from app import email_verification
+
+    enable_turnstile(monkeypatch, {"success": True, "action": "login"})
+    sent_codes: list[tuple[str, str]] = []
+    monkeypatch.setattr(email_verification, "generate_email_code", lambda: "123456")
+    monkeypatch.setattr(email_verification, "send_email_code", lambda email, code: sent_codes.append((email, code)))
+    client = make_test_client()
+
+    register_response = client.post(
+        "/api/auth/register",
+        json={
+            "username": "alice",
+            "password": "secret123",
+            "confirm_password": "secret123",
+        },
+    )
+    assert register_response.status_code == 200
+
+    pass_response = client.post(
+        "/api/auth/turnstile-pass",
+        json={
+            "turnstile_token": "login-token",
+            "action": "login",
+        },
+    )
+    assert pass_response.status_code == 200
+    turnstile_pass_token = pass_response.json()["turnstile_pass_token"]
+
+    FakeTurnstileClient.requests = []
+    code_response = client.post(
+        "/api/auth/register/email-code",
+        json={
+            "email": "bob@example.com",
+            "turnstile_pass_token": turnstile_pass_token,
+        },
+    )
+    login_response = client.post(
+        "/api/auth/login",
+        json={
+            "username": "alice",
+            "password": "secret123",
+            "turnstile_pass_token": turnstile_pass_token,
+        },
+    )
+
+    assert code_response.status_code == 200
+    assert login_response.status_code == 200
+    assert sent_codes == [("bob@example.com", "123456")]
+    assert FakeTurnstileClient.requests == []
+
+
+def test_register_turnstile_pass_can_cover_login(monkeypatch):
+    enable_turnstile(monkeypatch, {"success": True, "action": "register"})
+    client = make_test_client()
+
+    register_response = client.post(
+        "/api/auth/register",
+        json={
+            "username": "alice",
+            "password": "secret123",
+            "confirm_password": "secret123",
+        },
+    )
+    assert register_response.status_code == 200
+
+    pass_response = client.post(
+        "/api/auth/turnstile-pass",
+        json={
+            "turnstile_token": "register-token",
+            "action": "register",
+        },
+    )
+    assert pass_response.status_code == 200
+    turnstile_pass_token = pass_response.json()["turnstile_pass_token"]
+
+    FakeTurnstileClient.requests = []
+    login_response = client.post(
+        "/api/auth/login",
+        json={
+            "username": "alice",
+            "password": "secret123",
+            "turnstile_pass_token": turnstile_pass_token,
+        },
+    )
+
+    assert login_response.status_code == 200
+    assert FakeTurnstileClient.requests == []
+
+
+def test_turnstile_pass_rejects_expired_invalid_and_wrong_type_tokens(monkeypatch):
+    from app.security import utc_now
+
+    enable_turnstile(monkeypatch)
+    client = make_test_client()
+    expired_token = make_invalid_turnstile_pass({
+        "sub": "turnstile",
+        "scope": "auth",
+        "exp": utc_now() - timedelta(minutes=1),
+        "type": "turnstile_pass",
+    })
+    wrong_type_token = make_invalid_turnstile_pass({
+        "sub": "turnstile",
+        "scope": "auth",
+        "exp": utc_now() + timedelta(minutes=5),
+        "type": "access",
+    })
+
+    for token in ["not-a-jwt", expired_token, wrong_type_token]:
+        response = client.post(
+            "/api/auth/login",
+            json={
+                "username": "alice",
+                "password": "secret123",
+                "turnstile_token": "login-token",
+                "turnstile_pass_token": token,
+            },
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "人机验证已过期，请重新验证"
+
+    assert FakeTurnstileClient.requests == []
 
 
 def test_turnstile_rejects_failed_response(monkeypatch):

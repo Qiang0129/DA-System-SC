@@ -54,6 +54,37 @@ function installTurnstileMock() {
   };
 }
 
+function jsonResponse(body: unknown, ok = true) {
+  return {
+    ok,
+    json: async () => body,
+  } as Response;
+}
+
+function turnstilePassResponse(token = 'turnstile-pass-token') {
+  return jsonResponse({
+    turnstile_pass_token: token,
+    expires_at: '2026-07-29T12:00:00',
+    expires_in_seconds: 300,
+  });
+}
+
+function authSuccessResponse(username = 'alice') {
+  return jsonResponse({
+    access_token: 'access-token',
+    refresh_token: 'refresh-token',
+    user: { id: 1, username, role: 'user', status: 'active' },
+  });
+}
+
+async function flushMicrotasks(times = 4) {
+  await act(async () => {
+    for (let index = 0; index < times; index += 1) {
+      await Promise.resolve();
+    }
+  });
+}
+
 describe('AuthPages', () => {
   const originalFetch = globalThis.fetch;
   const originalTurnstile = window.turnstile;
@@ -79,14 +110,7 @@ describe('AuthPages', () => {
     const { LoginPage } = await loadAuthPages();
     const user = userEvent.setup();
     const onSuccess = vi.fn();
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        access_token: 'access-token',
-        refresh_token: 'refresh-token',
-        user: { id: 1, username: 'alice', role: 'user', status: 'active' },
-      }),
-    } as Response);
+    globalThis.fetch = vi.fn().mockResolvedValue(authSuccessResponse());
 
     render(
       <LoginPage
@@ -123,14 +147,7 @@ describe('AuthPages', () => {
     const { RegisterPage } = await loadAuthPages();
     const user = userEvent.setup();
     const onSuccess = vi.fn();
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        access_token: 'access-token',
-        refresh_token: 'refresh-token',
-        user: { id: 2, username: 'bob', role: 'user', status: 'active' },
-      }),
-    } as Response);
+    globalThis.fetch = vi.fn().mockResolvedValue(authSuccessResponse('bob'));
 
     render(
       <RegisterPage
@@ -170,10 +187,7 @@ describe('AuthPages', () => {
   it('sends a register email code before account creation', async () => {
     const { RegisterPage } = await loadAuthPages();
     const user = userEvent.setup();
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ message: '验证码已发送' }),
-    } as Response);
+    globalThis.fetch = vi.fn().mockResolvedValue(jsonResponse({ message: '验证码已发送' }));
 
     render(
       <RegisterPage
@@ -263,52 +277,10 @@ describe('AuthPages', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('错误码：400020');
   });
 
-  it('submits the Turnstile token with login credentials', async () => {
+  it('exchanges Turnstile completion for a short-lived pass', async () => {
     const { LoginPage } = await loadAuthPages('site-key');
-    const user = userEvent.setup();
     const turnstile = installTurnstileMock();
-    const onSuccess = vi.fn();
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        access_token: 'access-token',
-        refresh_token: 'refresh-token',
-        user: { id: 1, username: 'alice', role: 'user', status: 'active' },
-      }),
-    } as Response);
-
-    render(
-      <LoginPage
-        onSuccess={onSuccess}
-        onSwitch={() => undefined}
-        onBack={() => undefined}
-      />,
-    );
-
-    await waitFor(() => expect(turnstile.api.render).toHaveBeenCalledTimes(1));
-    turnstile.verify('cf-token');
-    await user.type(screen.getByLabelText('用户名或邮箱'), 'alice');
-    await user.type(screen.getByLabelText('密码'), 'secret123');
-    await user.click(screen.getByRole('button', { name: '登录' }));
-
-    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringMatching(/\/api\/auth\/login$/),
-      expect.objectContaining({
-        body: JSON.stringify({
-          username: 'alice',
-          password: 'secret123',
-          turnstile_token: 'cf-token',
-        }),
-      }),
-    );
-  });
-
-  it('resets Turnstile after an authentication failure', async () => {
-    const { LoginPage } = await loadAuthPages('site-key');
-    const user = userEvent.setup();
-    const turnstile = installTurnstileMock();
-    globalThis.fetch = vi.fn().mockRejectedValue(new Error('登录失败'));
+    globalThis.fetch = vi.fn().mockResolvedValue(turnstilePassResponse('shared-pass-token'));
 
     render(
       <LoginPage
@@ -320,12 +292,166 @@ describe('AuthPages', () => {
 
     await waitFor(() => expect(turnstile.api.render).toHaveBeenCalledTimes(1));
     turnstile.verify('cf-token');
+
+    await waitFor(() => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringMatching(/\/api\/auth\/turnstile-pass$/),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ turnstile_token: 'cf-token', action: 'login' }),
+        }),
+      );
+    });
+  });
+
+  it('submits the shared Turnstile pass with login credentials', async () => {
+    const { LoginPage } = await loadAuthPages('site-key');
+    const user = userEvent.setup();
+    const turnstile = installTurnstileMock();
+    const onSuccess = vi.fn();
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce(turnstilePassResponse('shared-pass-token'))
+      .mockResolvedValueOnce(authSuccessResponse());
+
+    render(
+      <LoginPage
+        onSuccess={onSuccess}
+        onSwitch={() => undefined}
+        onBack={() => undefined}
+      />,
+    );
+
+    await waitFor(() => expect(turnstile.api.render).toHaveBeenCalledTimes(1));
+    turnstile.verify('cf-token');
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(1));
+    await user.type(screen.getByLabelText('用户名或邮箱'), 'alice');
+    await user.type(screen.getByLabelText('密码'), 'secret123');
+    await user.click(screen.getByRole('button', { name: '登录' }));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+    expect(globalThis.fetch).toHaveBeenLastCalledWith(
+      expect.stringMatching(/\/api\/auth\/login$/),
+      expect.objectContaining({
+        body: JSON.stringify({
+          username: 'alice',
+          password: 'secret123',
+          turnstile_token: null,
+          turnstile_pass_token: 'shared-pass-token',
+        }),
+      }),
+    );
+  });
+
+  it('keeps a valid Turnstile pass after an authentication failure', async () => {
+    const { LoginPage } = await loadAuthPages('site-key');
+    const user = userEvent.setup();
+    const turnstile = installTurnstileMock();
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce(turnstilePassResponse('shared-pass-token'))
+      .mockRejectedValueOnce(new Error('登录失败'));
+
+    render(
+      <LoginPage
+        onSuccess={() => undefined}
+        onSwitch={() => undefined}
+        onBack={() => undefined}
+      />,
+    );
+
+    await waitFor(() => expect(turnstile.api.render).toHaveBeenCalledTimes(1));
+    turnstile.verify('cf-token');
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(1));
     await user.type(screen.getByLabelText('用户名或邮箱'), 'alice');
     await user.type(screen.getByLabelText('密码'), 'secret123');
     await user.click(screen.getByRole('button', { name: '登录' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('登录失败');
-    expect(turnstile.api.reset).toHaveBeenCalledWith('widget-1');
+    expect(turnstile.api.reset).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: '登录' }));
+    expect(globalThis.fetch).toHaveBeenLastCalledWith(
+      expect.stringMatching(/\/api\/auth\/login$/),
+      expect.objectContaining({
+        body: JSON.stringify({
+          username: 'alice',
+          password: 'secret123',
+          turnstile_token: null,
+          turnstile_pass_token: 'shared-pass-token',
+        }),
+      }),
+    );
+  });
+
+  it('reuses the login Turnstile pass on the register face', async () => {
+    const { AuthFlipCard } = await loadAuthPages('site-key');
+    const user = userEvent.setup();
+    const turnstile = installTurnstileMock();
+    const props = {
+      onSuccess: () => undefined,
+      onShowLogin: () => undefined,
+      onShowRegister: () => undefined,
+      onBack: () => undefined,
+    };
+    globalThis.fetch = vi.fn()
+      .mockResolvedValueOnce(turnstilePassResponse('shared-pass-token'))
+      .mockResolvedValueOnce(jsonResponse({ message: '验证码已发送' }));
+
+    const { rerender } = render(<AuthFlipCard mode="login" {...props} />);
+
+    await waitFor(() => expect(turnstile.api.render).toHaveBeenCalledTimes(1));
+    turnstile.verify('cf-token');
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(1));
+
+    rerender(<AuthFlipCard mode="register" {...props} />);
+    expect(turnstile.api.render).toHaveBeenCalledTimes(1);
+
+    await user.type(screen.getByLabelText('邮箱'), 'bob@example.com');
+    await user.click(screen.getByRole('button', { name: '发送验证码' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('验证码已发送，请查看邮箱');
+    expect(globalThis.fetch).toHaveBeenLastCalledWith(
+      expect.stringMatching(/\/api\/auth\/register\/email-code$/),
+      expect.objectContaining({
+        body: JSON.stringify({
+          email: 'bob@example.com',
+          turnstile_token: null,
+          turnstile_pass_token: 'shared-pass-token',
+        }),
+      }),
+    );
+    expect(turnstile.api.render).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires Turnstile again after the shared pass expires', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-29T12:00:00'));
+    try {
+      const { AuthFlipCard } = await loadAuthPages('site-key');
+      const turnstile = installTurnstileMock();
+      const props = {
+        onSuccess: () => undefined,
+        onShowLogin: () => undefined,
+        onShowRegister: () => undefined,
+        onBack: () => undefined,
+      };
+      globalThis.fetch = vi.fn().mockResolvedValue(turnstilePassResponse('shared-pass-token'));
+
+      render(<AuthFlipCard mode="login" {...props} />);
+
+      await flushMicrotasks();
+      expect(turnstile.api.render).toHaveBeenCalledTimes(1);
+      turnstile.verify('cf-token');
+      await flushMicrotasks();
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        vi.advanceTimersByTime(300000);
+      });
+      await flushMicrotasks();
+
+      expect(turnstile.api.render).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('flips between accessible login and register card faces', async () => {

@@ -187,7 +187,8 @@ mysql -u root -p < backend/sql/schema.sql
 3. 前端复制 `front/.env.example` 为 `front/.env`，填写 `VITE_TURNSTILE_SITE_KEY`。
 4. 后端在 `backend/config/database.env` 填写 `TURNSTILE_SECRET_KEY`。
 5. 本地不填写 `TURNSTILE_SECRET_KEY` 时，后端会跳过验证码校验；一旦填写，登录和注册接口都会强制校验 Cloudflare 返回结果。
-6. `front/.env` 和 `backend/config/database.env` 都包含本地配置或密钥，不要提交到仓库。
+6. 通过一次验证后，当前登录/注册页面会在 `TURNSTILE_PASS_EXPIRE_MINUTES` 分钟内共用本次验证结果，刷新页面或离开认证页后失效。
+7. `front/.env` 和 `backend/config/database.env` 都包含本地配置或密钥，不要提交到仓库。
 
 使用虚拟环境启动：
 

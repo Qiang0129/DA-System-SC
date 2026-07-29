@@ -23,17 +23,20 @@ from .schemas import (
     MessageResponse,
     RefreshRequest,
     RegisterRequest,
+    TurnstilePassRequest,
+    TurnstilePassResponse,
     UserResponse,
 )
 from .security import (
     create_access_token,
     create_refresh_token,
+    create_turnstile_pass_token,
     hash_password,
     hash_token,
     utc_now,
     verify_password,
 )
-from .turnstile import verify_turnstile_token
+from .turnstile import verify_turnstile_access, verify_turnstile_token
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -86,13 +89,25 @@ def parse_bearer_token(authorization: str | None) -> str:
     return token
 
 
+@router.post("/turnstile-pass", response_model=TurnstilePassResponse)
+def create_turnstile_pass(payload: TurnstilePassRequest):
+    verify_turnstile_token(payload.turnstile_token, payload.action)
+    pass_token, expires_at = create_turnstile_pass_token()
+    expires_in_seconds = max(0, int((expires_at - utc_now()).total_seconds()))
+    return TurnstilePassResponse(
+        turnstile_pass_token=pass_token,
+        expires_at=expires_at,
+        expires_in_seconds=expires_in_seconds,
+    )
+
+
 @router.post("/register/email-code", response_model=MessageResponse)
 def send_register_email_code(
     payload: EmailCodeRequest,
     request: Request,
     session: Session = Depends(get_session),
 ):
-    verify_turnstile_token(payload.turnstile_token, "register")
+    verify_turnstile_access(payload.turnstile_token, payload.turnstile_pass_token, "register")
 
     email = normalize_email(payload.email)
     client_ip = request.client.host if request.client else None
@@ -170,7 +185,7 @@ def register(payload: RegisterRequest, session: Session = Depends(get_session)):
 
 @router.post("/login", response_model=AuthResponse)
 def login(payload: LoginRequest, session: Session = Depends(get_session)):
-    verify_turnstile_token(payload.turnstile_token, "login")
+    verify_turnstile_access(payload.turnstile_token, payload.turnstile_pass_token, "login")
 
     user = get_active_user_or_401(session, payload.username, payload.password)
     user.last_login_at = utc_now()

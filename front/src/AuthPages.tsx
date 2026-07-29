@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ArrowLeft, LoaderCircle, LogIn, MailCheck, UserPlus } from 'lucide-react';
-import { login, register, saveAuthSession, sendRegisterEmailCode } from './api/auth';
+import {
+  createTurnstilePass,
+  login,
+  register,
+  saveAuthSession,
+  sendRegisterEmailCode,
+} from './api/auth';
+import type { TurnstileAction } from './api/auth';
 import { TURNSTILE_SITE_KEY } from './api/config';
 import { TurnstileWidget, type TurnstileWidgetHandle } from './TurnstileWidget';
 
@@ -12,7 +19,15 @@ interface AuthProps {
   onSwitch: () => void;
   onBack: () => void;
   turnstileEnabled?: boolean;
+  hasTurnstilePass?: boolean;
+  turnstilePassToken?: string;
+  onTurnstileVerify?: (token: string, action: TurnstileAction) => Promise<void>;
 }
+
+type TurnstilePassState = {
+  token: string;
+  expiresAtMs: number;
+};
 
 function waitForAuthSubmitFeedback(startedAt: number) {
   const remaining = AUTH_SUBMIT_FEEDBACK_MS - (Date.now() - startedAt);
@@ -25,6 +40,53 @@ function waitForAuthSubmitFeedback(startedAt: number) {
   return new Promise<void>((resolve) => {
     setTimeout(resolve, remaining);
   });
+}
+
+function getTurnstilePassExpiresAt(expiresInSeconds: number) {
+  const seconds = Number.isFinite(expiresInSeconds) && expiresInSeconds > 0 ? expiresInSeconds : 0;
+  return Date.now() + seconds * 1000;
+}
+
+function useAuthTurnstilePass() {
+  const [turnstilePass, setTurnstilePass] = useState<TurnstilePassState | null>(null);
+
+  useEffect(() => {
+    if (!turnstilePass) {
+      return undefined;
+    }
+
+    const remainingMs = turnstilePass.expiresAtMs - Date.now();
+    if (remainingMs <= 0) {
+      setTurnstilePass(null);
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      setTurnstilePass(null);
+    }, remainingMs);
+
+    return () => window.clearTimeout(timer);
+  }, [turnstilePass]);
+
+  const exchangeTurnstilePass = useCallback(async (token: string, action: TurnstileAction) => {
+    const response = await createTurnstilePass(token, action);
+    if (!response.turnstile_pass_token || response.expires_in_seconds <= 0) {
+      throw new Error('人机验证已过期，请重新验证');
+    }
+
+    setTurnstilePass({
+      token: response.turnstile_pass_token,
+      expiresAtMs: getTurnstilePassExpiresAt(response.expires_in_seconds),
+    });
+  }, []);
+
+  const hasTurnstilePass = Boolean(turnstilePass && turnstilePass.expiresAtMs > Date.now());
+
+  return {
+    hasTurnstilePass,
+    turnstilePassToken: hasTurnstilePass && turnstilePass ? turnstilePass.token : '',
+    onTurnstileVerify: exchangeTurnstilePass,
+  };
 }
 
 function AuthField({
@@ -62,21 +124,40 @@ function AuthField({
   );
 }
 
-function LoginCard({ onSuccess, onSwitch, onBack, turnstileEnabled = true }: AuthProps) {
+function LoginCard({
+  onSuccess,
+  onSwitch,
+  onBack,
+  turnstileEnabled = true,
+  hasTurnstilePass = false,
+  turnstilePassToken = '',
+  onTurnstileVerify,
+}: AuthProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const turnstileRef = useRef<TurnstileWidgetHandle | null>(null);
-  const turnstileRequired = Boolean(TURNSTILE_SITE_KEY) && turnstileEnabled;
+  const turnstileRequired = Boolean(TURNSTILE_SITE_KEY) && turnstileEnabled && !hasTurnstilePass;
 
   const handleTurnstileVerify = useCallback((token: string) => {
     setTurnstileToken(token);
-    if (token) {
-      setError('');
+    if (!token) {
+      return;
     }
-  }, []);
+
+    setError('');
+    void onTurnstileVerify?.(token, 'login')
+      .then(() => {
+        setTurnstileToken('');
+      })
+      .catch((err) => {
+        setTurnstileToken('');
+        setError(err instanceof Error ? err.message : '人机验证失败，请重新验证');
+        turnstileRef.current?.reset();
+      });
+  }, [onTurnstileVerify]);
 
   const handleTurnstileError = useCallback((message: string) => {
     setTurnstileToken('');
@@ -102,7 +183,12 @@ function LoginCard({ onSuccess, onSwitch, onBack, turnstileEnabled = true }: Aut
 
     setSubmitting(true);
     try {
-      const auth = await login(username.trim(), password, turnstileToken || null);
+      const auth = await login(
+        username.trim(),
+        password,
+        turnstileRequired ? turnstileToken || null : null,
+        hasTurnstilePass ? turnstilePassToken : null,
+      );
       saveAuthSession(auth);
       await waitForAuthSubmitFeedback(startedAt);
       onSuccess();
@@ -177,7 +263,15 @@ function LoginCard({ onSuccess, onSwitch, onBack, turnstileEnabled = true }: Aut
   );
 }
 
-function RegisterCard({ onSuccess, onSwitch, onBack, turnstileEnabled = true }: AuthProps) {
+function RegisterCard({
+  onSuccess,
+  onSwitch,
+  onBack,
+  turnstileEnabled = true,
+  hasTurnstilePass = false,
+  turnstilePassToken = '',
+  onTurnstileVerify,
+}: AuthProps) {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -190,14 +284,25 @@ function RegisterCard({ onSuccess, onSwitch, onBack, turnstileEnabled = true }: 
   const [emailCodeCooldown, setEmailCodeCooldown] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const turnstileRef = useRef<TurnstileWidgetHandle | null>(null);
-  const turnstileRequired = Boolean(TURNSTILE_SITE_KEY) && turnstileEnabled;
+  const turnstileRequired = Boolean(TURNSTILE_SITE_KEY) && turnstileEnabled && !hasTurnstilePass;
 
   const handleTurnstileVerify = useCallback((token: string) => {
     setTurnstileToken(token);
-    if (token) {
-      setError('');
+    if (!token) {
+      return;
     }
-  }, []);
+
+    setError('');
+    void onTurnstileVerify?.(token, 'register')
+      .then(() => {
+        setTurnstileToken('');
+      })
+      .catch((err) => {
+        setTurnstileToken('');
+        setError(err instanceof Error ? err.message : '人机验证失败，请重新验证');
+        turnstileRef.current?.reset();
+      });
+  }, [onTurnstileVerify]);
 
   const handleTurnstileError = useCallback((message: string) => {
     setTurnstileToken('');
@@ -240,7 +345,11 @@ function RegisterCard({ onSuccess, onSwitch, onBack, turnstileEnabled = true }: 
 
     setSendingEmailCode(true);
     try {
-      await sendRegisterEmailCode(email.trim(), turnstileToken || null);
+      await sendRegisterEmailCode(
+        email.trim(),
+        turnstileRequired ? turnstileToken || null : null,
+        hasTurnstilePass ? turnstilePassToken : null,
+      );
       setNotice('验证码已发送，请查看邮箱');
       setEmailCodeCooldown(60);
       resetTurnstile();
@@ -394,19 +503,23 @@ function RegisterCard({ onSuccess, onSwitch, onBack, turnstileEnabled = true }: 
 }
 
 export function LoginPage({ onSuccess, onSwitch, onBack }: AuthProps) {
+  const turnstilePass = useAuthTurnstilePass();
+
   return (
     <div className="auth-page">
       <div className="blur-ball blur-ball-amber" aria-hidden="true" />
-      <LoginCard onSuccess={onSuccess} onSwitch={onSwitch} onBack={onBack} />
+      <LoginCard onSuccess={onSuccess} onSwitch={onSwitch} onBack={onBack} {...turnstilePass} />
     </div>
   );
 }
 
 export function RegisterPage({ onSuccess, onSwitch, onBack }: AuthProps) {
+  const turnstilePass = useAuthTurnstilePass();
+
   return (
     <div className="auth-page">
       <div className="blur-ball blur-ball-amber" aria-hidden="true" />
-      <RegisterCard onSuccess={onSuccess} onSwitch={onSwitch} onBack={onBack} />
+      <RegisterCard onSuccess={onSuccess} onSwitch={onSwitch} onBack={onBack} {...turnstilePass} />
     </div>
   );
 }
@@ -459,6 +572,7 @@ export function AuthFlipCard({
   onBack,
 }: AuthFlipCardProps) {
   const flipped = mode === 'register';
+  const turnstilePass = useAuthTurnstilePass();
 
   return (
     <div className="auth-page">
@@ -471,6 +585,7 @@ export function AuthFlipCard({
               onSwitch={onShowRegister}
               onBack={onBack}
               turnstileEnabled={!flipped}
+              {...turnstilePass}
             />
           </AuthFlipFace>
           <AuthFlipFace active={flipped} className="auth-flip-face auth-flip-back">
@@ -479,6 +594,7 @@ export function AuthFlipCard({
               onSwitch={onShowLogin}
               onBack={onBack}
               turnstileEnabled={flipped}
+              {...turnstilePass}
             />
           </AuthFlipFace>
         </div>

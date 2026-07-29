@@ -1,6 +1,9 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
+
+TurnstileAction = Literal["login", "register"]
 
 
 class RegisterRequest(BaseModel):
@@ -21,12 +24,25 @@ class RegisterRequest(BaseModel):
 class EmailCodeRequest(BaseModel):
     email: str = Field(min_length=5, max_length=255)
     turnstile_token: str | None = Field(default=None, max_length=2048)
+    turnstile_pass_token: str | None = Field(default=None, max_length=2048)
 
 
 class LoginRequest(BaseModel):
     username: str = Field(min_length=3, max_length=255)
     password: str = Field(min_length=6, max_length=128)
     turnstile_token: str | None = Field(default=None, max_length=2048)
+    turnstile_pass_token: str | None = Field(default=None, max_length=2048)
+
+
+class TurnstilePassRequest(BaseModel):
+    turnstile_token: str = Field(min_length=1, max_length=2048)
+    action: TurnstileAction
+
+
+class TurnstilePassResponse(BaseModel):
+    turnstile_pass_token: str
+    expires_at: datetime
+    expires_in_seconds: int
 
 
 class RefreshRequest(BaseModel):

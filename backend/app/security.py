@@ -43,6 +43,28 @@ def create_access_token(user_id: int, username: str) -> str:
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
+def create_turnstile_pass_token() -> tuple[str, datetime]:
+    settings = get_settings()
+    expires_at = utc_now() + timedelta(minutes=settings.turnstile_pass_expire_minutes)
+    payload = {
+        "sub": "turnstile",
+        "scope": "auth",
+        "exp": expires_at,
+        "type": "turnstile_pass",
+    }
+    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm), expires_at
+
+
+def decode_turnstile_pass_token(token: str) -> bool:
+    settings = get_settings()
+    try:
+        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+    except JWTError:
+        return False
+
+    return payload.get("type") == "turnstile_pass" and payload.get("scope") == "auth"
+
+
 def decode_access_token(token: str) -> int | None:
     settings = get_settings()
     try:

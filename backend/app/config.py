@@ -41,6 +41,7 @@ class Settings(BaseSettings):
         validation_alias="TURNSTILE_VERIFY_URL",
     )
     turnstile_timeout_seconds: float = Field(5.0, validation_alias="TURNSTILE_TIMEOUT_SECONDS")
+    turnstile_pass_expire_minutes: int = Field(5, validation_alias="TURNSTILE_PASS_EXPIRE_MINUTES")
     email_verification_required: bool = Field(True, validation_alias="EMAIL_VERIFICATION_REQUIRED")
     email_code_expire_minutes: int = Field(10, validation_alias="EMAIL_CODE_EXPIRE_MINUTES")
     email_code_resend_cooldown_seconds: int = Field(60, validation_alias="EMAIL_CODE_RESEND_COOLDOWN_SECONDS")
