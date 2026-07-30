@@ -97,6 +97,7 @@ function AuthField({
   value,
   onChange,
   autoComplete,
+  placeholder,
 }: {
   id: string;
   name: string;
@@ -105,6 +106,7 @@ function AuthField({
   value: string;
   onChange: (value: string) => void;
   autoComplete: string;
+  placeholder?: string;
 }) {
   return (
     <div className="auth-field">
@@ -117,6 +119,7 @@ function AuthField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         autoComplete={autoComplete}
+        placeholder={placeholder}
         spellCheck={type === 'text' ? false : undefined}
         required
       />
@@ -220,6 +223,7 @@ function LoginCard({
           value={username}
           onChange={setUsername}
           autoComplete="username"
+          placeholder="请输入用户名或邮箱"
         />
         <AuthField
           id="login-password"
@@ -229,6 +233,7 @@ function LoginCard({
           value={password}
           onChange={setPassword}
           autoComplete="current-password"
+          placeholder="请输入密码"
         />
         <TurnstileWidget
           ref={turnstileRef}
@@ -415,6 +420,7 @@ function RegisterCard({
           value={username}
           onChange={setUsername}
           autoComplete="username"
+          placeholder="请输入用户名"
         />
         <AuthField
           id="register-email"
@@ -424,6 +430,7 @@ function RegisterCard({
           value={email}
           onChange={setEmail}
           autoComplete="email"
+          placeholder="请输入邮箱"
         />
         <AuthField
           id="register-password"
@@ -433,6 +440,7 @@ function RegisterCard({
           value={password}
           onChange={setPassword}
           autoComplete="new-password"
+          placeholder="请输入密码"
         />
         <AuthField
           id="register-confirm"
@@ -442,6 +450,7 @@ function RegisterCard({
           value={confirm}
           onChange={setConfirm}
           autoComplete="new-password"
+          placeholder="请再次输入密码"
         />
         <TurnstileWidget
           ref={turnstileRef}
@@ -459,6 +468,7 @@ function RegisterCard({
             value={emailCode}
             onChange={setEmailCode}
             autoComplete="one-time-code"
+            placeholder="请输入验证码"
           />
           <button
             type="button"
