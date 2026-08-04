@@ -97,6 +97,26 @@ class ClusterStatItem(BaseModel):
     range: str
 
 
+class DatasetVariableResponse(BaseModel):
+    shape: list[int]
+    dtype: str
+
+
+class DatasetParseResponse(BaseModel):
+    fileName: str
+    variables: dict[str, DatasetVariableResponse]
+    mainVariable: str | None = None
+    labelVariable: str | None = None
+    sampleCount: int
+    baseCount: int
+    classCount: int
+    hasLabels: bool
+    matrixShape: str
+    labelShape: str
+    labelDistribution: list[LabelDistributionItem] = Field(default_factory=list)
+    clusterStats: list[ClusterStatItem] = Field(default_factory=list)
+
+
 class DatasetCatalogItemResponse(BaseModel):
     id: int
     name: str

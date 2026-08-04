@@ -11,6 +11,12 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 
 class Settings(BaseSettings):
     app_env: str = Field("development", validation_alias="APP_ENV")
+    max_dataset_file_size_mb: int = Field(100, ge=1, validation_alias="MAX_DATASET_FILE_SIZE_MB")
+    max_matrix_rows: int = Field(50000, ge=1, validation_alias="MAX_MATRIX_ROWS")
+    max_matrix_columns: int = Field(5000, ge=1, validation_alias="MAX_MATRIX_COLUMNS")
+    max_mat_variables: int = Field(100, ge=1, validation_alias="MAX_MAT_VARIABLES")
+    user_storage_quota_mb: int = Field(2048, ge=1, validation_alias="USER_STORAGE_QUOTA_MB")
+    dataset_parse_timeout_seconds: float = Field(30.0, gt=0, validation_alias="DATASET_PARSE_TIMEOUT_SECONDS")
     db_host: str = Field("127.0.0.1", validation_alias="DB_HOST")
     db_port: int = Field(3306, validation_alias="DB_PORT")
     db_name: str = Field("soft_web", validation_alias="DB_NAME")

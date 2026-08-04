@@ -128,6 +128,144 @@ def test_parse_mat_dataset_without_labels_returns_empty_label_summary():
     assert body["labelDistribution"] == []
 
 
+def test_dataset_upload_rejects_non_mat_extension_before_staging(tmp_path, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "dataset_storage_dir", tmp_path)
+    client = _make_test_client()
+    headers = _register_and_headers(client)
+
+    response = client.post(
+        "/api/datasets",
+        headers=headers,
+        files={"file": ("not-a-mat.txt", b"not a mat file", "text/plain")},
+    )
+
+    assert response.status_code == 400
+    assert "仅支持 .mat" in response.json()["detail"]
+    assert not list(tmp_path.rglob("*"))
+
+
+def test_dataset_upload_rejects_file_size_limit_and_cleans_storage(tmp_path, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "dataset_storage_dir", tmp_path)
+    monkeypatch.setattr(settings, "max_dataset_file_size_mb", 1)
+    client = _make_test_client()
+    headers = _register_and_headers(client)
+
+    response = client.post(
+        "/api/datasets",
+        headers=headers,
+        files={"file": ("oversized.mat", b"x" * (1024 * 1024 + 1), "application/octet-stream")},
+    )
+
+    assert response.status_code == 413
+    assert "文件大小超过限制" in response.json()["detail"]
+    assert not list(tmp_path.rglob("*.mat"))
+
+
+def test_dataset_upload_rejects_oversized_matrix(tmp_path, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "dataset_storage_dir", tmp_path)
+    monkeypatch.setattr(settings, "max_matrix_rows", 2)
+    client = _make_test_client()
+    headers = _register_and_headers(client)
+    payload = _mat_file_payload({"E": np.array([[1, 2], [2, 3], [3, 4]])})
+
+    response = client.post(
+        "/api/datasets",
+        headers=headers,
+        files={"file": ("oversized-matrix.mat", payload, "application/octet-stream")},
+    )
+
+    assert response.status_code == 413
+    assert "矩阵行数超过限制" in response.json()["detail"]
+    assert not list(tmp_path.rglob("*.mat"))
+
+
+def test_dataset_parse_rejects_malformed_and_nonfinite_mat_files():
+    client = _make_test_client()
+    headers = _register_and_headers(client)
+
+    malformed_response = client.post(
+        "/api/datasets/parse",
+        headers=headers,
+        files={"file": ("malformed.mat", b"not a mat file", "application/octet-stream")},
+    )
+    assert malformed_response.status_code == 400
+    assert malformed_response.json()["detail"] == "无法解析 .mat 文件"
+
+    nonfinite_payload = _mat_file_payload({"E": np.array([[1.0, np.nan], [2.0, 3.0]])})
+    nonfinite_response = client.post(
+        "/api/datasets/parse",
+        headers=headers,
+        files={"file": ("nonfinite.mat", nonfinite_payload, "application/octet-stream")},
+    )
+    assert nonfinite_response.status_code == 400
+    assert "包含 NaN 或 Inf" in nonfinite_response.json()["detail"]
+
+
+def test_dataset_parse_rejects_object_and_abnormal_matrix_structure():
+    client = _make_test_client()
+    headers = _register_and_headers(client)
+
+    object_payload = _mat_file_payload({"E": np.array([[1, 2]], dtype=object)})
+    object_response = client.post(
+        "/api/datasets/parse",
+        headers=headers,
+        files={"file": ("object.mat", object_payload, "application/octet-stream")},
+    )
+    assert object_response.status_code == 400
+    assert "对象类型" in object_response.json()["detail"]
+
+    abnormal_payload = _mat_file_payload({"E": np.zeros((2, 2, 2), dtype=np.float32)})
+    abnormal_response = client.post(
+        "/api/datasets/parse",
+        headers=headers,
+        files={"file": ("abnormal.mat", abnormal_payload, "application/octet-stream")},
+    )
+    assert abnormal_response.status_code == 400
+    assert "结构异常" in abnormal_response.json()["detail"]
+
+
+def test_dataset_parse_timeout_is_enforced(monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "dataset_parse_timeout_seconds", 0.001)
+    client = _make_test_client()
+    headers = _register_and_headers(client)
+    payload = _mat_file_payload({"E": np.array([[1, 2], [2, 3]])})
+
+    response = client.post(
+        "/api/datasets/parse",
+        headers=headers,
+        files={"file": ("timeout.mat", payload, "application/octet-stream")},
+    )
+
+    assert response.status_code == 408
+    assert "解析超时" in response.json()["detail"]
+
+
+def test_dataset_upload_enforces_user_storage_quota(tmp_path, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "dataset_storage_dir", tmp_path)
+    monkeypatch.setattr(settings, "user_storage_quota_mb", 1)
+    client = _make_test_client()
+    headers = _register_and_headers(client)
+    user_storage = tmp_path / "1"
+    user_storage.mkdir(parents=True)
+    (user_storage / "existing.bin").write_bytes(b"x" * (1024 * 1024))
+    payload = _mat_file_payload({"E": np.array([[1, 2], [2, 3]])})
+
+    response = client.post(
+        "/api/datasets",
+        headers=headers,
+        files={"file": ("quota.mat", payload, "application/octet-stream")},
+    )
+
+    assert response.status_code == 413
+    assert "用户存储空间不足" in response.json()["detail"]
+    assert not list(user_storage.glob("*.mat"))
+
+
 def test_dataset_parse_and_example_mat_require_authentication():
     client = _make_test_client()
     payload = _mat_file_payload({"E": np.array([[1, 2], [2, 3]])})

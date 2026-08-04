@@ -1,9 +1,16 @@
+import asyncio
 import hashlib
 import io
 import json
 import logging
+import multiprocessing
+import os
+import pickle
 import re
+import shutil
+import tempfile
 import zipfile
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -23,6 +30,7 @@ from .schemas import (
     DatasetBulkRequest,
     DatasetCatalogItemResponse,
     DatasetCatalogPageResponse,
+    DatasetParseResponse,
     DatasetRenameRequest,
     DatasetRevisionResponse,
     MessageResponse,
@@ -31,7 +39,37 @@ from .schemas import (
 router = APIRouter(prefix="/api/datasets", tags=["datasets"])
 LABEL_VARIABLE_NAMES = ("y", "label", "labels")
 SAFE_FILENAME_PATTERN = re.compile(r"[^0-9A-Za-z._-]+")
+UPLOAD_CHUNK_SIZE = 1024 * 1024
 logger = logging.getLogger(__name__)
+
+
+class MatValidationError(ValueError):
+    def __init__(self, message: str, status_code: int = 400):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+@dataclass(frozen=True)
+class MatLimits:
+    max_file_size_bytes: int
+    max_matrix_rows: int
+    max_matrix_columns: int
+    max_variables: int
+    timeout_seconds: float
+
+
+@dataclass
+class StagedUpload:
+    path: Path
+    filename: str
+    size: int
+    file_hash: str
+
+    def cleanup(self) -> None:
+        try:
+            self.path.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("清理临时数据集文件失败：%s", self.path.name)
 
 
 def _variable_shape(value) -> list[int]:
@@ -134,18 +172,199 @@ def _dataset_name(filename: str) -> str:
     return (Path(filename).stem or "未命名数据集")[:128]
 
 
-def _load_mat_content(filename: str, content: bytes) -> dict:
-    if not filename.lower().endswith(".mat"):
-        raise HTTPException(400, f"不支持的文件格式: {filename}，目前仅支持 .mat")
-
-    try:
-        return sio.loadmat(io.BytesIO(content))
-    except Exception as exc:
-        raise HTTPException(400, f"无法解析 .mat 文件: {exc}") from exc
+def _mat_limits() -> MatLimits:
+    settings = get_settings()
+    return MatLimits(
+        max_file_size_bytes=int(settings.max_dataset_file_size_mb) * 1024 * 1024,
+        max_matrix_rows=int(settings.max_matrix_rows),
+        max_matrix_columns=int(settings.max_matrix_columns),
+        max_variables=int(settings.max_mat_variables),
+        timeout_seconds=float(settings.dataset_parse_timeout_seconds),
+    )
 
 
 def _visible_mat_variables(mat: dict) -> dict:
     return {name: value for name, value in mat.items() if not name.startswith("__")}
+
+
+def _validate_loaded_mat(mat: dict, limits: MatLimits) -> None:
+    variables = _visible_mat_variables(mat)
+    if not variables:
+        raise MatValidationError(".mat 文件不包含可用变量")
+    if len(variables) > limits.max_variables:
+        raise MatValidationError(
+            f".mat 文件变量数量超过限制（最多 {limits.max_variables} 个）",
+            status_code=413,
+        )
+
+    for name, value in variables.items():
+        if not isinstance(value, np.ndarray):
+            raise MatValidationError(f"变量“{name}”结构异常，仅支持 NumPy 数组")
+        if value.dtype.hasobject or value.dtype.kind in {"O", "V"}:
+            raise MatValidationError(f"变量“{name}”包含不支持的对象类型")
+        if value.ndim not in {1, 2}:
+            raise MatValidationError(f"变量“{name}”结构异常，仅支持一维或二维数组")
+        if any(int(dimension) <= 0 for dimension in value.shape):
+            raise MatValidationError(f"变量“{name}”包含空维度")
+
+        if value.ndim == 1 and value.shape[0] > limits.max_matrix_rows:
+            raise MatValidationError(
+                f"变量“{name}”长度超过限制（最多 {limits.max_matrix_rows} 行）",
+                status_code=413,
+            )
+        if value.ndim == 2:
+            rows, columns = (int(value.shape[0]), int(value.shape[1]))
+            if rows > limits.max_matrix_rows:
+                raise MatValidationError(
+                    f"矩阵行数超过限制（最多 {limits.max_matrix_rows} 行）",
+                    status_code=413,
+                )
+            if columns > limits.max_matrix_columns:
+                raise MatValidationError(
+                    f"矩阵列数超过限制（最多 {limits.max_matrix_columns} 列）",
+                    status_code=413,
+                )
+
+        if np.issubdtype(value.dtype, np.number):
+            try:
+                finite = np.isfinite(value)
+            except TypeError as exc:
+                raise MatValidationError(f"变量“{name}”数值结构异常") from exc
+            if not bool(np.all(finite)):
+                raise MatValidationError(f"变量“{name}”包含 NaN 或 Inf")
+
+    variable_info = {
+        name: {"shape": _variable_shape(value), "dtype": str(value.dtype)}
+        for name, value in variables.items()
+    }
+    main_variable, _ = _find_main_variable(mat, variable_info)
+    if not main_variable:
+        raise MatValidationError("未检测到有效的二维基础聚类矩阵")
+    main_matrix = variables[main_variable]
+    if main_matrix.ndim != 2 or not np.issubdtype(main_matrix.dtype, np.number):
+        raise MatValidationError("基础聚类矩阵必须是二维数值数组")
+
+
+def _mat_parse_worker(
+    source_path: str,
+    result_path: str,
+    filename: str,
+    max_matrix_rows: int,
+    max_matrix_columns: int,
+    max_variables: int,
+    result_queue,
+) -> None:
+    limits = MatLimits(
+        max_file_size_bytes=0,
+        max_matrix_rows=max_matrix_rows,
+        max_matrix_columns=max_matrix_columns,
+        max_variables=max_variables,
+        timeout_seconds=0,
+    )
+    try:
+        mat = sio.loadmat(source_path)
+        _validate_loaded_mat(mat, limits)
+        parsed = _parse_loaded_mat(filename, mat)
+        if result_path:
+            with Path(result_path).open("wb") as output:
+                pickle.dump(_visible_mat_variables(mat), output, protocol=pickle.HIGHEST_PROTOCOL)
+        result_queue.put({"ok": True, "parsed": parsed})
+    except MatValidationError as exc:
+        result_queue.put(
+            {
+                "ok": False,
+                "statusCode": exc.status_code,
+                "message": str(exc),
+            },
+        )
+    except Exception:
+        result_queue.put(
+            {
+                "ok": False,
+                "statusCode": 400,
+                "message": "无法解析 .mat 文件",
+            },
+        )
+
+
+def _controlled_parse_mat_file(
+    source_path: Path,
+    filename: str,
+    *,
+    include_mat: bool = False,
+    limits: MatLimits | None = None,
+) -> tuple[dict, dict | None]:
+    limits = limits or _mat_limits()
+    try:
+        file_size = source_path.stat().st_size
+    except OSError as exc:
+        raise HTTPException(400, "上传文件临时副本不可用") from exc
+    if file_size <= 0:
+        raise HTTPException(400, "上传文件为空")
+    if file_size > limits.max_file_size_bytes:
+        raise HTTPException(
+            413,
+            f"文件大小超过限制（最大 {limits.max_file_size_bytes // (1024 * 1024)} MB）",
+        )
+
+    result_path: Path | None = None
+    if include_mat:
+        result_file = tempfile.NamedTemporaryFile(prefix="soft-web-mat-", suffix=".pickle", delete=False)
+        result_path = Path(result_file.name)
+        result_file.close()
+
+    context = multiprocessing.get_context("spawn")
+    result_queue = context.Queue(maxsize=1)
+    process = context.Process(
+        target=_mat_parse_worker,
+        args=(
+            str(source_path),
+            str(result_path) if result_path else "",
+            _safe_filename(filename),
+            limits.max_matrix_rows,
+            limits.max_matrix_columns,
+            limits.max_variables,
+            result_queue,
+        ),
+    )
+
+    try:
+        process.start()
+        process.join(limits.timeout_seconds)
+        if process.is_alive():
+            process.terminate()
+            process.join(2)
+            if process.is_alive():
+                process.kill()
+                process.join()
+            raise HTTPException(408, "数据集解析超时，请检查文件复杂度")
+
+        try:
+            result = result_queue.get(timeout=2)
+        except Exception as exc:
+            raise HTTPException(400, "无法解析 .mat 文件") from exc
+
+        if not result.get("ok"):
+            status_code = int(result.get("statusCode") or 400)
+            message = str(result.get("message") or "无法解析 .mat 文件")
+            raise HTTPException(status_code, message)
+
+        parsed = result["parsed"]
+        parsed_mat = None
+        if result_path is not None:
+            with result_path.open("rb") as source:
+                parsed_mat = pickle.load(source)
+        return parsed, parsed_mat
+    finally:
+        if result_path is not None:
+            try:
+                result_path.unlink(missing_ok=True)
+            except OSError:
+                logger.warning("清理矩阵临时交换文件失败：%s", result_path.name)
+        result_queue.close()
+        result_queue.join_thread()
+        if process.pid is not None:
+            process.close()
 
 
 def _find_main_variable(mat: dict, variables: dict) -> tuple[str | None, list[int]]:
@@ -200,7 +419,30 @@ def _parse_loaded_mat(filename: str, mat: dict) -> dict:
 
 
 def _parse_mat_content(filename: str, content: bytes) -> dict:
-    return _parse_loaded_mat(filename, _load_mat_content(filename, content))
+    if not filename.lower().endswith(".mat"):
+        raise HTTPException(400, f"不支持的文件格式: {filename}，目前仅支持 .mat")
+    limits = _mat_limits()
+    if len(content) > limits.max_file_size_bytes:
+        raise HTTPException(
+            413,
+            f"文件大小超过限制（最大 {limits.max_file_size_bytes // (1024 * 1024)} MB）",
+        )
+    staged_file = tempfile.NamedTemporaryFile(prefix="soft-web-mat-", suffix=".mat", delete=False)
+    staged_path = Path(staged_file.name)
+    try:
+        staged_file.write(content)
+        staged_file.close()
+        parsed, _ = _controlled_parse_mat_file(staged_path, filename, limits=limits)
+        return parsed
+    finally:
+        try:
+            staged_file.close()
+        except OSError:
+            pass
+        try:
+            staged_path.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("清理矩阵临时文件失败：%s", staged_path.name)
 
 
 def _persist_parse_log(
@@ -322,7 +564,8 @@ def _parse_stored_dataset_file(dataset: Dataset) -> dict:
         return {}
 
     try:
-        return _parse_mat_content(dataset.original_filename, path.read_bytes())
+        parsed, _ = _controlled_parse_mat_file(path, dataset.original_filename)
+        return parsed
     except HTTPException:
         return {}
 
@@ -405,18 +648,122 @@ def _catalog_item(
     )
 
 
-def _save_dataset_upload(user_id: int, filename: str, content: bytes) -> tuple[dict, str, Path]:
-    parsed = _parse_mat_content(filename, content)
+async def _stage_upload(file: UploadFile) -> StagedUpload:
+    filename = file.filename or ""
+    if not filename:
+        raise HTTPException(400, "未选择文件")
+    if Path(filename).suffix.lower() != ".mat":
+        raise HTTPException(400, f"不支持的文件格式: {filename}，目前仅支持 .mat")
+
+    limits = _mat_limits()
+    staged_file = tempfile.NamedTemporaryFile(prefix="soft-web-upload-", suffix=".mat", delete=False)
+    staged_path = Path(staged_file.name)
+    digest = hashlib.sha256()
+    size = 0
+    try:
+        while True:
+            chunk = await file.read(UPLOAD_CHUNK_SIZE)
+            if not chunk:
+                break
+            size += len(chunk)
+            if size > limits.max_file_size_bytes:
+                raise HTTPException(
+                    413,
+                    f"文件大小超过限制（最大 {limits.max_file_size_bytes // (1024 * 1024)} MB）",
+                )
+            staged_file.write(chunk)
+            digest.update(chunk)
+        staged_file.close()
+        if size == 0:
+            raise HTTPException(400, "上传文件为空")
+        return StagedUpload(
+            path=staged_path,
+            filename=filename,
+            size=size,
+            file_hash=digest.hexdigest(),
+        )
+    except Exception:
+        try:
+            staged_file.close()
+        except OSError:
+            pass
+        try:
+            staged_path.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("清理上传临时文件失败：%s", staged_path.name)
+        raise
+
+
+def _storage_directory(user_id: int) -> Path:
     settings = get_settings()
-    storage_dir = Path(settings.dataset_storage_dir) / str(user_id)
+    return Path(settings.dataset_storage_dir) / str(user_id)
+
+
+def _storage_usage_bytes(user_id: int) -> int:
+    storage_dir = _storage_directory(user_id)
+    if not storage_dir.exists():
+        return 0
+    total = 0
+    for path in storage_dir.rglob("*"):
+        try:
+            if path.is_file():
+                total += path.stat().st_size
+        except OSError:
+            continue
+    return total
+
+
+def _ensure_user_storage_quota(user_id: int, additional_bytes: int) -> None:
+    settings = get_settings()
+    quota_bytes = int(settings.user_storage_quota_mb) * 1024 * 1024
+    used_bytes = _storage_usage_bytes(user_id)
+    if used_bytes + additional_bytes > quota_bytes:
+        used_mb = round(used_bytes / (1024 * 1024), 2)
+        quota_mb = int(settings.user_storage_quota_mb)
+        raise HTTPException(
+            413,
+            f"用户存储空间不足：已使用 {used_mb} MB，配额为 {quota_mb} MB",
+        )
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        while True:
+            chunk = source.read(UPLOAD_CHUNK_SIZE)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _save_staged_upload(user_id: int, staged: StagedUpload, filename: str | None = None) -> tuple[str, Path]:
+    filename = filename or staged.filename
+    storage_dir = _storage_directory(user_id)
     storage_dir.mkdir(parents=True, exist_ok=True)
 
-    file_hash = hashlib.sha256(content).hexdigest()
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
-    storage_path = storage_dir / f"{timestamp}_{file_hash[:12]}_{_safe_filename(filename)}"
-    storage_path.write_bytes(content)
+    storage_path = storage_dir / f"{timestamp}_{staged.file_hash[:12]}_{_safe_filename(filename)}"
+    temporary_storage = tempfile.NamedTemporaryFile(
+        prefix=".soft-web-storage-",
+        suffix=".tmp",
+        dir=storage_dir,
+        delete=False,
+    )
+    temporary_path = Path(temporary_storage.name)
+    try:
+        temporary_storage.close()
+        with staged.path.open("rb") as source, temporary_path.open("wb") as destination:
+            shutil.copyfileobj(source, destination, length=UPLOAD_CHUNK_SIZE)
+        os.replace(temporary_path, storage_path)
+    except Exception:
+        try:
+            temporary_path.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("清理存储临时文件失败：%s", temporary_path.name)
+        raise
 
-    return parsed, file_hash, storage_path
+    return staged.file_hash, storage_path
 
 
 def _raw_label_values(value) -> np.ndarray:
@@ -436,16 +783,28 @@ def _merge_label_values(current_value, incoming_value) -> np.ndarray:
     return combined_labels
 
 
-def _build_appended_mat_content(
+def _build_appended_mat_file(
+    current_path: Path,
     current_filename: str,
-    current_content: bytes,
+    incoming_path: Path,
     incoming_filename: str,
-    incoming_content: bytes,
-) -> bytes:
-    current_mat = _load_mat_content(current_filename, current_content)
-    incoming_mat = _load_mat_content(incoming_filename, incoming_content)
-    current_parsed = _parse_loaded_mat(current_filename, current_mat)
-    incoming_parsed = _parse_loaded_mat(incoming_filename, incoming_mat)
+    output_path: Path,
+    limits: MatLimits,
+) -> dict:
+    current_parsed, current_mat = _controlled_parse_mat_file(
+        current_path,
+        current_filename,
+        include_mat=True,
+        limits=limits,
+    )
+    incoming_parsed, incoming_mat = _controlled_parse_mat_file(
+        incoming_path,
+        incoming_filename,
+        include_mat=True,
+        limits=limits,
+    )
+    if current_mat is None or incoming_mat is None:
+        raise HTTPException(400, "无法读取追加数据的矩阵内容")
 
     current_main_var = current_parsed.get("mainVariable")
     incoming_main_var = incoming_parsed.get("mainVariable")
@@ -487,9 +846,16 @@ def _build_appended_mat_content(
             incoming_mat[incoming_label_var],
         )
 
-    buffer = io.BytesIO()
-    sio.savemat(buffer, combined_mat)
-    return buffer.getvalue()
+    _validate_loaded_mat(combined_mat, limits)
+    sio.savemat(str(output_path), combined_mat)
+    output_size = output_path.stat().st_size
+    if output_size > limits.max_file_size_bytes:
+        raise HTTPException(
+            413,
+            f"追加后的文件大小超过限制（最大 {limits.max_file_size_bytes // (1024 * 1024)} MB）",
+        )
+    parsed, _ = _controlled_parse_mat_file(output_path, current_filename, limits=limits)
+    return parsed
 
 
 def _get_user_dataset(session: Session, dataset_id: int, user: User) -> Dataset:
@@ -642,46 +1008,48 @@ async def upload_dataset(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    if not file.filename:
-        raise HTTPException(400, "未选择文件")
-
-    content = await file.read()
-    if not content:
-        raise HTTPException(400, "上传文件为空")
-
-    dataset_name = _dataset_name(file.filename)
-    if not allow_duplicate and _find_name_conflict(session, user, dataset_name):
-        raise HTTPException(409, f"已存在同名数据集“{dataset_name}”，请使用追加数据或确认保留独立副本")
-
-    parsed, file_hash, storage_path = _save_dataset_upload(user.id, file.filename, content)
-
-    dataset = Dataset(
-        user_id=user.id,
-        name=dataset_name,
-        original_filename=file.filename,
-        storage_path=str(storage_path),
-        file_hash=file_hash,
-        sample_count=parsed["sampleCount"],
-        base_cluster_count=parsed["baseCount"],
-        has_ground_truth=parsed["hasLabels"],
-        cluster_count=parsed["classCount"] if parsed["hasLabels"] else None,
-        status="ready",
-    )
-    session.add(dataset)
-
+    staged: StagedUpload | None = None
+    storage_path: Path | None = None
     try:
+        staged = await _stage_upload(file)
+        dataset_name = _dataset_name(staged.filename)
+        if not allow_duplicate and _find_name_conflict(session, user, dataset_name):
+            raise HTTPException(409, f"已存在同名数据集“{dataset_name}”，请使用追加数据或确认保留独立副本")
+
+        _ensure_user_storage_quota(user.id, staged.size)
+        parsed, _ = await asyncio.to_thread(_controlled_parse_mat_file, staged.path, staged.filename)
+        file_hash, storage_path = await asyncio.to_thread(_save_staged_upload, user.id, staged)
+
+        dataset = Dataset(
+            user_id=user.id,
+            name=dataset_name,
+            original_filename=staged.filename,
+            storage_path=str(storage_path),
+            file_hash=file_hash,
+            sample_count=parsed["sampleCount"],
+            base_cluster_count=parsed["baseCount"],
+            has_ground_truth=parsed["hasLabels"],
+            cluster_count=parsed["classCount"] if parsed["hasLabels"] else None,
+            status="ready",
+        )
+        session.add(dataset)
         session.flush()
         quality = _upsert_quality(session, dataset, parsed)
         _record_revision(session, dataset, parsed, "uploaded", quality)
-        session.commit()
+        session.flush()
         session.refresh(dataset)
+        response = _catalog_item(session, dataset, parsed, quality)
+        session.commit()
     except Exception:
         session.rollback()
-        if storage_path.exists():
-            storage_path.unlink()
+        if storage_path is not None:
+            storage_path.unlink(missing_ok=True)
         raise
+    finally:
+        if staged is not None:
+            staged.cleanup()
 
-    return _catalog_item(session, dataset, parsed, quality)
+    return response
 
 
 @router.put("/{dataset_id}", response_model=DatasetCatalogItemResponse)
@@ -693,48 +1061,56 @@ async def replace_dataset_file(
     session: Session = Depends(get_session),
 ):
     dataset = _get_user_dataset(session, dataset_id, user)
-    if not file.filename:
-        raise HTTPException(400, "未选择文件")
-
-    content = await file.read()
-    if not content:
-        raise HTTPException(400, "上传文件为空")
-
-    next_name = _dataset_name(file.filename)
-    if not allow_duplicate and _find_name_conflict(session, user, next_name, exclude_dataset_id=dataset.id):
-        raise HTTPException(409, f"已存在同名数据集“{next_name}”，请确认是否保留独立副本")
-
-    current_parsed = _parse_stored_dataset_file(dataset)
-    current_quality = _quality_for_dataset(session, dataset, current_parsed)
-    if _next_version(session, dataset.id) == 1:
-        _record_revision(session, dataset, current_parsed, "uploaded", current_quality)
-
-    parsed, file_hash, storage_path = _save_dataset_upload(user.id, file.filename, content)
-
-    dataset.name = next_name
-    dataset.original_filename = file.filename
-    dataset.storage_path = str(storage_path)
-    dataset.file_hash = file_hash
-    dataset.sample_count = parsed["sampleCount"]
-    dataset.base_cluster_count = parsed["baseCount"]
-    dataset.has_ground_truth = parsed["hasLabels"]
-    dataset.cluster_count = parsed["classCount"] if parsed["hasLabels"] else None
-    dataset.status = "ready"
-    dataset.created_at = datetime.now().replace(microsecond=0)
-
+    staged: StagedUpload | None = None
+    storage_path: Path | None = None
     try:
+        staged = await _stage_upload(file)
+        next_name = _dataset_name(staged.filename)
+        if not allow_duplicate and _find_name_conflict(session, user, next_name, exclude_dataset_id=dataset.id):
+            raise HTTPException(409, f"已存在同名数据集“{next_name}”，请确认是否保留独立副本")
+
+        _ensure_user_storage_quota(user.id, staged.size)
+        current_path = Path(dataset.storage_path)
+        current_parsed, _ = await asyncio.to_thread(
+            _controlled_parse_mat_file,
+            current_path,
+            dataset.original_filename,
+        )
+        current_quality = _quality_for_dataset(session, dataset, current_parsed)
+        if _next_version(session, dataset.id) == 1:
+            _record_revision(session, dataset, current_parsed, "uploaded", current_quality)
+
+        parsed, _ = await asyncio.to_thread(_controlled_parse_mat_file, staged.path, staged.filename)
+        file_hash, storage_path = await asyncio.to_thread(_save_staged_upload, user.id, staged)
+
+        dataset.name = next_name
+        dataset.original_filename = staged.filename
+        dataset.storage_path = str(storage_path)
+        dataset.file_hash = file_hash
+        dataset.sample_count = parsed["sampleCount"]
+        dataset.base_cluster_count = parsed["baseCount"]
+        dataset.has_ground_truth = parsed["hasLabels"]
+        dataset.cluster_count = parsed["classCount"] if parsed["hasLabels"] else None
+        dataset.status = "ready"
+        dataset.created_at = datetime.now().replace(microsecond=0)
+
         session.flush()
         quality = _upsert_quality(session, dataset, parsed)
         _record_revision(session, dataset, parsed, "replaced", quality)
-        session.commit()
+        session.flush()
         session.refresh(dataset)
+        response = _catalog_item(session, dataset, parsed, quality)
+        session.commit()
     except Exception:
         session.rollback()
-        if storage_path.exists():
-            storage_path.unlink()
+        if storage_path is not None:
+            storage_path.unlink(missing_ok=True)
         raise
+    finally:
+        if staged is not None:
+            staged.cleanup()
 
-    return _catalog_item(session, dataset, parsed, quality)
+    return response
 
 
 @router.post("/{dataset_id}/append", response_model=DatasetCatalogItemResponse)
@@ -745,52 +1121,80 @@ async def append_dataset_file(
     session: Session = Depends(get_session),
 ):
     dataset = _get_user_dataset(session, dataset_id, user)
-    if not file.filename:
-        raise HTTPException(400, "未选择文件")
-
-    incoming_content = await file.read()
-    if not incoming_content:
-        raise HTTPException(400, "上传文件为空")
-
-    current_path = Path(dataset.storage_path)
-    if not current_path.exists():
-        raise HTTPException(409, "当前数据集文件不存在，无法追加")
-
-    current_content = current_path.read_bytes()
-    current_parsed = _parse_mat_content(dataset.original_filename, current_content)
-    current_quality = _quality_for_dataset(session, dataset, current_parsed)
-    if _next_version(session, dataset.id) == 1:
-        _record_revision(session, dataset, current_parsed, "uploaded", current_quality)
-
-    appended_content = _build_appended_mat_content(
-        dataset.original_filename,
-        current_content,
-        file.filename,
-        incoming_content,
-    )
-    parsed, file_hash, storage_path = _save_dataset_upload(user.id, dataset.original_filename, appended_content)
-
-    dataset.storage_path = str(storage_path)
-    dataset.file_hash = file_hash
-    dataset.sample_count = parsed["sampleCount"]
-    dataset.base_cluster_count = parsed["baseCount"]
-    dataset.has_ground_truth = parsed["hasLabels"]
-    dataset.cluster_count = parsed["classCount"] if parsed["hasLabels"] else None
-    dataset.status = "ready"
-
+    staged: StagedUpload | None = None
+    output_staged: StagedUpload | None = None
+    output_path: Path | None = None
+    storage_path: Path | None = None
     try:
+        staged = await _stage_upload(file)
+        current_path = Path(dataset.storage_path)
+        if not current_path.exists():
+            raise HTTPException(409, "当前数据集文件不存在，无法追加")
+
+        current_parsed, _ = await asyncio.to_thread(
+            _controlled_parse_mat_file,
+            current_path,
+            dataset.original_filename,
+        )
+        current_quality = _quality_for_dataset(session, dataset, current_parsed)
+        if _next_version(session, dataset.id) == 1:
+            _record_revision(session, dataset, current_parsed, "uploaded", current_quality)
+
+        output_file = tempfile.NamedTemporaryFile(prefix="soft-web-append-", suffix=".mat", delete=False)
+        output_path = Path(output_file.name)
+        output_file.close()
+        parsed = await asyncio.to_thread(
+            _build_appended_mat_file,
+            current_path,
+            dataset.original_filename,
+            staged.path,
+            staged.filename,
+            output_path,
+            _mat_limits(),
+        )
+        output_staged = StagedUpload(
+            path=output_path,
+            filename=dataset.original_filename,
+            size=output_path.stat().st_size,
+            file_hash=await asyncio.to_thread(_file_sha256, output_path),
+        )
+        _ensure_user_storage_quota(user.id, output_staged.size)
+        file_hash, storage_path = await asyncio.to_thread(
+            _save_staged_upload,
+            user.id,
+            output_staged,
+            dataset.original_filename,
+        )
+
+        dataset.storage_path = str(storage_path)
+        dataset.file_hash = file_hash
+        dataset.sample_count = parsed["sampleCount"]
+        dataset.base_cluster_count = parsed["baseCount"]
+        dataset.has_ground_truth = parsed["hasLabels"]
+        dataset.cluster_count = parsed["classCount"] if parsed["hasLabels"] else None
+        dataset.status = "ready"
+
         session.flush()
         quality = _upsert_quality(session, dataset, parsed)
         _record_revision(session, dataset, parsed, "appended", quality)
-        session.commit()
+        session.flush()
         session.refresh(dataset)
+        response = _catalog_item(session, dataset, parsed, quality)
+        session.commit()
     except Exception:
         session.rollback()
-        if storage_path.exists():
-            storage_path.unlink()
+        if storage_path is not None:
+            storage_path.unlink(missing_ok=True)
         raise
+    finally:
+        if staged is not None:
+            staged.cleanup()
+        if output_staged is not None:
+            output_staged.cleanup()
+        elif output_path is not None:
+            output_path.unlink(missing_ok=True)
 
-    return _catalog_item(session, dataset, parsed, quality)
+    return response
 
 
 @router.patch("/{dataset_id}", response_model=DatasetCatalogItemResponse)
@@ -941,28 +1345,17 @@ def read_example_mat(user: User = Depends(get_current_user)):
     if not mat_path.exists():
         raise HTTPException(404, ".mat file not found")
 
-    mat = sio.loadmat(str(mat_path))
-    variables = {}
-
-    for name, value in mat.items():
-        if name.startswith("__"):
-            continue
-        variables[name] = {
-            "shape": _variable_shape(value),
-            "dtype": str(value.dtype),
-        }
-
-    e_shape = variables.get("E", {}).get("shape", [0, 0])
+    parsed, _ = _controlled_parse_mat_file(mat_path, mat_path.name)
 
     return {
-        "variables": variables,
-        "sampleCount": e_shape[0],
-        "baseCount": e_shape[1],
-        "hasLabels": "y" in variables,
+        "variables": parsed["variables"],
+        "sampleCount": parsed["sampleCount"],
+        "baseCount": parsed["baseCount"],
+        "hasLabels": parsed["hasLabels"],
     }
 
 
-@router.post("/parse")
+@router.post("/parse", response_model=DatasetParseResponse)
 async def parse_dataset_file(
     file: UploadFile = File(...),
     user: User = Depends(get_current_user),
@@ -970,13 +1363,11 @@ async def parse_dataset_file(
 ):
     source_filename = file.filename or ""
     safe_filename = _safe_filename(source_filename) if source_filename else "unknown"
+    staged: StagedUpload | None = None
 
     try:
-        if not source_filename:
-            raise HTTPException(400, "未选择文件")
-
-        content = await file.read()
-        parsed = _parse_mat_content(source_filename, content)
+        staged = await _stage_upload(file)
+        parsed, _ = await asyncio.to_thread(_controlled_parse_mat_file, staged.path, staged.filename)
     except HTTPException as exc:
         session.rollback()
         _persist_parse_log(
@@ -999,17 +1390,20 @@ async def parse_dataset_file(
         )
         logger.exception("数据集文件解析出现未预期异常：%s", safe_filename)
         raise HTTPException(500, "数据集解析失败") from exc
-
-    _persist_parse_log(
-        session,
-        user,
-        filename=safe_filename,
-        success=True,
-        detail={
-            "sampleCount": parsed.get("sampleCount", 0),
-            "baseCount": parsed.get("baseCount", 0),
-            "classCount": parsed.get("classCount", 0),
-            "hasLabels": bool(parsed.get("hasLabels")),
-        },
-    )
-    return parsed
+    else:
+        _persist_parse_log(
+            session,
+            user,
+            filename=safe_filename,
+            success=True,
+            detail={
+                "sampleCount": parsed.get("sampleCount", 0),
+                "baseCount": parsed.get("baseCount", 0),
+                "classCount": parsed.get("classCount", 0),
+                "hasLabels": bool(parsed.get("hasLabels")),
+            },
+        )
+        return parsed
+    finally:
+        if staged is not None:
+            staged.cleanup()
