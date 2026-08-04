@@ -21,11 +21,13 @@ from omelet.analysis import run_analysis  # noqa: E402
 
 EVENT_PREFIX = "OMELET_EVENT "
 KERNEL_KEYS = ("rbf_sigma_squared", "linear", "rbf_sigma", "polynomial_2")
+_EVENT_CONTEXT: dict[str, Any] = {}
 
 
 def emit(event_type: str, **payload: Any) -> None:
+    event = {"type": event_type, **_EVENT_CONTEXT, **payload}
     print(
-        EVENT_PREFIX + json.dumps({"type": event_type, **payload}, ensure_ascii=False, allow_nan=False),
+        EVENT_PREFIX + json.dumps(event, ensure_ascii=False, allow_nan=False),
         flush=True,
     )
 
@@ -228,6 +230,13 @@ def _write_artifacts(
 
 def execute(job_path: Path) -> None:
     job = json.loads(job_path.read_text(encoding="utf-8"))
+    _EVENT_CONTEXT.clear()
+    _EVENT_CONTEXT.update(
+        {
+            "taskId": job.get("taskId"),
+            "workerId": job.get("workerId"),
+        },
+    )
     output_dir = Path(job["outputDir"]).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     started = perf_counter()

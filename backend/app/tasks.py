@@ -264,7 +264,13 @@ def _refresh_user_running_tasks(session: Session, user_id: int, task_ids: list[i
     return None
 
 
-def _queue_task(session: Session, task: AnalysisTask, user: User) -> None:
+def _queue_task(
+    session: Session,
+    task: AnalysisTask,
+    user: User,
+    *,
+    increment_retry: bool = False,
+) -> None:
     if task.status not in STARTABLE_STATUSES and task.status != "queued":
         raise HTTPException(422, f"当前状态不可启动: {task.status}")
 
@@ -277,6 +283,8 @@ def _queue_task(session: Session, task: AnalysisTask, user: User) -> None:
         raise HTTPException(422, f"n_base 不能超过数据集基础聚类数 {dataset.base_cluster_count}")
 
     task.status = "queued"
+    if increment_retry:
+        task.retry_count = int(task.retry_count or 0) + 1
     task.progress = 0
     task.current_run = 0
     task.current_iter = 0
@@ -285,6 +293,8 @@ def _queue_task(session: Session, task: AnalysisTask, user: User) -> None:
     task.queued_at = _now()
     task.started_at = None
     task.finished_at = None
+    task.worker_id = None
+    task.heartbeat_at = None
     task.current_stage = PIPELINE_STAGES[0][0]
     _add_log(
         session,
@@ -896,6 +906,8 @@ def cancel_task(
     task.status = "cancelled"
     task.finished_at = _now()
     task.current_stage = task.current_stage or PIPELINE_STAGES[0][0]
+    task.worker_id = None
+    task.heartbeat_at = None
     _add_log(
         session,
         user_id=user.id,
@@ -924,7 +936,7 @@ def retry_task(
     if old_result is not None:
         _remove_result_directory(old_result)
         session.delete(old_result)
-    _queue_task(session, task, user)
+    _queue_task(session, task, user, increment_retry=True)
     _add_log(
         session,
         user_id=user.id,
@@ -1052,12 +1064,14 @@ def bulk_tasks(
                 if old_result is not None:
                     _remove_result_directory(old_result)
                     session.delete(old_result)
-                _queue_task(session, task, user)
+                _queue_task(session, task, user, increment_retry=True)
                 affected += 1
                 notify_executor = True
             elif action == "cancel" and task.status in CANCELABLE_STATUSES:
                 task.status = "cancelled"
                 task.finished_at = _now()
+                task.worker_id = None
+                task.heartbeat_at = None
                 affected += 1
                 active_cancellations.append(task.id)
             elif action == "delete" and task.status in DELETABLE_STATUSES:

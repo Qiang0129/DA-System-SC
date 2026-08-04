@@ -45,6 +45,20 @@ cd "G:\研究生阶段\实验室项目\soft_web"
 5. `app/task_worker.py`
    - 单个 OMELET / OMELET-SV 任务执行入口。
 
+## 任务执行器部署约束
+
+任务执行器使用 `analysis_tasks` 的数据库租约、`worker_id` 和心跳字段保证不会重复领取同一任务。当前实现仍是随 FastAPI 进程启动的单调度器：生产部署只能保留一个 `TASK_EXECUTOR_ENABLED=true` 的实例，其他 API 实例必须设置为 `false`，Uvicorn 也只能使用一个启用调度器的 worker。
+
+相关配置及默认值：
+
+```text
+TASK_MAX_RUNTIME_SECONDS=3600
+TASK_HEARTBEAT_INTERVAL_SECONDS=10
+TASK_HEARTBEAT_TIMEOUT_SECONDS=60
+```
+
+进程超过最大运行时间会被终止完整进程树并标记为 `failure_reason=timeout`，不会自动重试。服务停止或检测到心跳超时的运行任务会重新排队并递增 `retry_count`，需要用户手动重试的失败任务同样会递增该字段。
+
 ## 测试
 
 ```powershell

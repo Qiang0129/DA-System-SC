@@ -106,6 +106,9 @@ CREATE TABLE IF NOT EXISTS analysis_tasks (
   error_message TEXT NULL,
   failure_reason VARCHAR(64) NULL,
   current_stage VARCHAR(64) NULL,
+  worker_id VARCHAR(128) NULL,
+  heartbeat_at DATETIME NULL,
+  retry_count INT NOT NULL DEFAULT 0,
   queued_at DATETIME NULL,
   started_at DATETIME NULL,
   finished_at DATETIME NULL,
@@ -118,6 +121,10 @@ CREATE TABLE IF NOT EXISTS analysis_tasks (
   KEY idx_analysis_tasks_created_at (created_at),
   KEY idx_analysis_tasks_user_dataset (user_id, dataset_id),
   KEY idx_analysis_tasks_dataset_status_finished (dataset_id, status, finished_at),
+  KEY idx_analysis_tasks_worker_id (worker_id),
+  KEY idx_analysis_tasks_heartbeat_at (heartbeat_at),
+  KEY idx_analysis_tasks_status_queued (status, queued_at, id),
+  KEY idx_analysis_tasks_status_heartbeat (status, heartbeat_at),
   CONSTRAINT fk_analysis_tasks_user_id
     FOREIGN KEY (user_id) REFERENCES users(id)
     ON DELETE CASCADE,

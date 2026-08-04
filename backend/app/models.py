@@ -125,6 +125,10 @@ class AnalysisTask(Base):
     __table_args__ = (
         Index("idx_analysis_tasks_user_dataset", "user_id", "dataset_id"),
         Index("idx_analysis_tasks_dataset_status_finished", "dataset_id", "status", "finished_at"),
+        Index("idx_analysis_tasks_worker_id", "worker_id"),
+        Index("idx_analysis_tasks_heartbeat_at", "heartbeat_at"),
+        Index("idx_analysis_tasks_status_queued", "status", "queued_at", "id"),
+        Index("idx_analysis_tasks_status_heartbeat", "status", "heartbeat_at"),
     )
 
     id: Mapped[int] = mapped_column(IDENTIFIER_TYPE, primary_key=True, autoincrement=True)
@@ -141,6 +145,9 @@ class AnalysisTask(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     failure_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
     current_stage: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    worker_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     queued_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

@@ -50,7 +50,16 @@ def test_upgrade_head_creates_current_schema_and_version(tmp_path):
     }.issubset(tables)
 
     columns = {column["name"] for column in inspector.get_columns("analysis_tasks")}
-    assert {"name", "failure_reason", "current_stage", "queued_at", "finished_at"}.issubset(columns)
+    assert {
+        "name",
+        "failure_reason",
+        "current_stage",
+        "worker_id",
+        "heartbeat_at",
+        "retry_count",
+        "queued_at",
+        "finished_at",
+    }.issubset(columns)
 
     foreign_keys = inspector.get_foreign_keys("analysis_tasks")
     dataset_fk = next(fk for fk in foreign_keys if fk["constrained_columns"] == ["dataset_id"])
@@ -62,7 +71,14 @@ def test_upgrade_head_creates_current_schema_and_version(tmp_path):
     assert operation_log_fk["options"]["ondelete"] == "SET NULL"
 
     index_names = {index["name"] for index in inspector.get_indexes("analysis_tasks")}
-    assert {"idx_analysis_tasks_user_dataset", "idx_analysis_tasks_dataset_status_finished"}.issubset(index_names)
+    assert {
+        "idx_analysis_tasks_user_dataset",
+        "idx_analysis_tasks_dataset_status_finished",
+        "idx_analysis_tasks_worker_id",
+        "idx_analysis_tasks_heartbeat_at",
+        "idx_analysis_tasks_status_queued",
+        "idx_analysis_tasks_status_heartbeat",
+    }.issubset(index_names)
 
     with engine.connect() as connection:
         version_rows = connection.execute(text("SELECT version_num FROM alembic_version")).scalars().all()

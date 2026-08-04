@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     )
     task_executor_enabled: bool = Field(True, validation_alias="TASK_EXECUTOR_ENABLED")
     task_poll_interval_seconds: float = Field(1.0, validation_alias="TASK_POLL_INTERVAL_SECONDS")
+    task_max_runtime_seconds: float = Field(3600.0, gt=0, validation_alias="TASK_MAX_RUNTIME_SECONDS")
+    task_heartbeat_interval_seconds: float = Field(10.0, gt=0, validation_alias="TASK_HEARTBEAT_INTERVAL_SECONDS")
+    task_heartbeat_timeout_seconds: float = Field(60.0, gt=0, validation_alias="TASK_HEARTBEAT_TIMEOUT_SECONDS")
     turnstile_secret_key: str = Field("", validation_alias="TURNSTILE_SECRET_KEY")
     turnstile_verify_url: str = Field(
         "https://challenges.cloudflare.com/turnstile/v0/siteverify",
