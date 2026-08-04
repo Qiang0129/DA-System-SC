@@ -51,12 +51,12 @@ function Get-EnvFileValue {
 }
 
 if (-not (Test-Path -LiteralPath $NodeModulesDir)) {
-  Write-Host "front/node_modules is missing. Run npm install in front first."
+  Write-Host "front/node_modules is missing. Run npm ci in front first."
   exit 1
 }
 
 if (-not (Test-Path -LiteralPath $ViteCommand)) {
-  Write-Host "Vite command is missing. Run npm install in front first."
+  Write-Host "Vite command is missing. Run npm ci in front first."
   exit 1
 }
 

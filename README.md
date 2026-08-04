@@ -137,8 +137,8 @@ cd "F:\研究生阶段\实验室项目\soft_web"
 
 ```powershell
 cd "F:\研究生阶段\实验室项目\soft_web\front"
-# 首次运行时安装依赖，后续启动可跳过此命令
-npm install
+# 依赖必须依据 package-lock.json 完整安装
+npm ci
 npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
@@ -203,8 +203,8 @@ cd "F:\研究生阶段\实验室项目\soft_web\backend"
 # 首次运行时创建虚拟环境，后续启动可跳过此命令
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-# 首次运行时安装依赖，依赖更新后再重新执行
-pip install -r requirements.txt
+# 依赖必须依据锁文件完整安装
+pip install -r requirements-lock.txt
 python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
@@ -232,7 +232,7 @@ http://127.0.0.1:8000/api/health
 
 ```bash
 cd ec_python_converted
-pip install -r requirements.txt
+pip install -r requirements-lock.txt
 python demo_OMELET.py --runs 1 --lambda-values 5 --gamma-values 5 --sigma-powers 0
 python OMELET_SV.py --runs 1 --lambda-values 5 --gamma-values 5 --sigma-powers 0
 ```

@@ -13,7 +13,7 @@
 ## 安装依赖
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements-lock.txt
 ```
 
 ## 快速运行测试
