@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Bookmark, NotebookPen, Plus, Star, Tag, X } from 'lucide-react';
 import { SelectField } from '../../../components/SelectField';
+import { formatLocalDateTime } from '../../../utils/time';
 import type { TaskLocalMeta } from '../taskLocalMeta';
 import type { AnalysisTask, AnalysisTaskLog } from '../types';
 import {
@@ -137,8 +138,8 @@ export function TaskDetailDrawer({
                   <div><span>当前迭代</span><strong>{task.currentIter}/{task.maxIter}</strong></div>
                   <div><span>当前阶段</span><strong>{stageLabel(task.currentStage)}</strong></div>
                   <div><span>耗时</span><strong>{formatRuntime(task.runtimeSeconds)}</strong></div>
-                  <div><span>创建时间</span><strong>{task.createdAt || '-'}</strong></div>
-                  <div><span>开始 / 结束</span><strong>{task.startedAt || '-'} / {task.finishedAt || '-'}</strong></div>
+                  <div><span>创建时间</span><strong>{formatLocalDateTime(task.createdAt)}</strong></div>
+                  <div><span>开始 / 结束</span><strong>{formatLocalDateTime(task.startedAt)} / {formatLocalDateTime(task.finishedAt)}</strong></div>
                 </div>
                 {task.errorMessage ? (
                   <div className="task-error-box">
@@ -207,7 +208,7 @@ export function TaskDetailDrawer({
                 {!loadingLogs && logs.length === 0 ? <p>暂无日志</p> : null}
                 {logs.map((log) => (
                   <article key={log.id} className={`task-log-item level-${log.level}`}>
-                    <header><strong>{log.action}</strong><span>{log.createdAt}</span></header>
+                    <header><strong>{log.action}</strong><span>{formatLocalDateTime(log.createdAt)}</span></header>
                     <p>{log.message}</p>
                   </article>
                 ))}

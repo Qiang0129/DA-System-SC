@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { setAccessToken } from './api/auth';
+import { formatLocalDateTime } from './utils/time';
 import type { MatrixPreview, TaskResultEnvelope } from './workbench/results/types';
 
 const originalFetch = globalThis.fetch;
@@ -58,10 +59,10 @@ function createTaskResultEnvelope({ emptyDetails = false }: { emptyDetails?: boo
       params: { nBase: 20, sigma: 1, lambda: 5, gamma: 5, anchor: 10, runs: 6, maxIter: 3, randomSeed: 1 },
       metricsSummary: { acc: 0.7122507123, nmi: 0.1348569209, ari: 0.1776068547, f1: 0.6049131591 },
       runtimeSeconds: 0.61,
-      createdAt: '2026-07-16 19:10:00',
-      startedAt: '2026-07-16 19:10:01',
-      finishedAt: '2026-07-16 19:10:02',
-      updatedAt: '2026-07-16 19:10:02',
+      createdAt: '2026-07-16T19:10:00Z',
+      startedAt: '2026-07-16T19:10:01Z',
+      finishedAt: '2026-07-16T19:10:02Z',
+      updatedAt: '2026-07-16T19:10:02Z',
     },
     result: {
       schemaVersion: 1,
@@ -201,7 +202,7 @@ function createDataset(overrides: Partial<DatasetFixture> = {}): DatasetFixture 
   const base: DatasetFixture = {
     id: 8,
     name: 'example_upload',
-    createdAt: '2026-07-09 16:20:31',
+    createdAt: '2026-07-09T16:20:31Z',
     fileSizeBytes: 24576,
     sampleCount: 24,
     baseCount: 24,
@@ -259,7 +260,7 @@ function mockAuthApi(resultEnvelope = createTaskResultEnvelope()) {
 
     if (url.endsWith('/api/tasks/3/logs')) {
       return createResponse({
-        items: [{ id: 1, action: 'task_succeeded', level: 'info', message: '算法执行完成', createdAt: '2026-07-16 19:10:02' }],
+        items: [{ id: 1, action: 'task_succeeded', level: 'info', message: '算法执行完成', createdAt: '2026-07-16T19:10:02Z' }],
         total: 1,
       });
     }
@@ -751,7 +752,7 @@ describe('dashboard homepage', () => {
 
     const datasetHeading = screen.getByRole('heading', { name: dataset.name });
     expect(datasetHeading).toBeInTheDocument();
-    expect(datasetHeading.closest('.dataset-detail-identity')).toHaveTextContent(dataset.createdAt);
+    expect(datasetHeading.closest('.dataset-detail-identity')).toHaveTextContent(formatLocalDateTime(dataset.createdAt));
     expect(datasetHeading.closest('.dataset-detail-identity')).toHaveTextContent('24 KB');
     expect(document.querySelector('.dataset-detail-breadcrumb')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '返回' })).toBeInTheDocument();
@@ -922,7 +923,7 @@ describe('dashboard homepage', () => {
       id: 9,
       name: 'completed_analysis_dataset',
       taskCount: 3,
-      lastAnalysisAt: '2026-08-04 10:20:30',
+      lastAnalysisAt: '2026-08-04T10:20:30Z',
     });
     setAccessToken('access-token');
     mockDatasetApi({ datasets: [pendingDataset, completedDataset] });
@@ -930,9 +931,10 @@ describe('dashboard homepage', () => {
     renderApp('/workbench/datasets');
 
     expect(await screen.findByText('2 任务 · —')).toHaveAttribute('title', '2 任务 · —');
-    expect(screen.getByText('3 任务 · 2026-08-04 10:20:30')).toHaveAttribute(
+    const usageSummary = screen.getByText((content) => content.startsWith('3 任务 · '));
+    expect(usageSummary).toHaveAttribute(
       'title',
-      '3 任务 · 2026-08-04 10:20:30',
+      usageSummary.textContent,
     );
   });
 

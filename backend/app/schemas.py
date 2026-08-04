@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_serializer, model_validator
+
+from .time_utils import format_utc_iso
 
 TurnstileAction = Literal["login", "register"]
 
@@ -44,6 +46,10 @@ class TurnstilePassResponse(BaseModel):
     expires_at: datetime
     expires_in_seconds: int
 
+    @field_serializer("expires_at", when_used="json")
+    def serialize_expires_at(self, value: datetime) -> str:
+        return format_utc_iso(value) or ""
+
 
 class UserResponse(BaseModel):
     id: int
@@ -54,6 +60,10 @@ class UserResponse(BaseModel):
     last_login_at: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("last_login_at", when_used="json")
+    def serialize_last_login_at(self, value: datetime | None) -> str | None:
+        return format_utc_iso(value)
 
 
 class AuthResponse(BaseModel):

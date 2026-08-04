@@ -7,6 +7,9 @@ CREATE DATABASE IF NOT EXISTS soft_web
 
 USE soft_web;
 
+-- 当前连接以及应用连接统一使用 UTC；DATETIME 字段不携带时区，语义由此固定。
+SET time_zone = '+00:00';
+
 CREATE TABLE IF NOT EXISTS alembic_version (
   version_num VARCHAR(32) NOT NULL,
   PRIMARY KEY (version_num)
@@ -17,6 +20,7 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
   description VARCHAR(255) NOT NULL,
   migrated_rows INT UNSIGNED NOT NULL DEFAULT 0,
   skipped_rows INT UNSIGNED NOT NULL DEFAULT 0,
+  metadata_json TEXT NULL,
   applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (version)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

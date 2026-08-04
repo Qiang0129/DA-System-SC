@@ -94,6 +94,7 @@ def test_register_login_me_and_logout_flow():
     assert register_body["user"]["username"] == "alice"
     assert register_body["user"]["email"] == "alice@example.com"
     assert register_body["user"]["role"] == "user"
+    assert register_body["user"]["last_login_at"].endswith("Z")
     assert register_body["access_token"]
     assert "refresh_token" not in register_body
     assert "soft_web_refresh=" in register_response.headers["set-cookie"]
@@ -145,6 +146,7 @@ def test_register_login_me_and_logout_flow():
     )
     assert me_response.status_code == 200
     assert me_response.json()["username"] == "alice"
+    assert me_response.json()["last_login_at"].endswith("Z")
 
     refresh_response = client.post(
         "/api/auth/refresh",
@@ -399,6 +401,7 @@ def test_turnstile_pass_exchange_returns_short_lived_token(monkeypatch):
     body = response.json()
     assert body["turnstile_pass_token"]
     assert body["expires_at"]
+    assert body["expires_at"].endswith("Z")
     assert 1 <= body["expires_in_seconds"] <= 300
     assert FakeTurnstileClient.requests == [
         {

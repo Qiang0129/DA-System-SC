@@ -18,7 +18,7 @@ function createDataset(overrides: Partial<DatasetCatalogItem>): DatasetCatalogIt
   return {
     id: 1,
     name: 'Ionosphere',
-    createdAt: '2026-07-14 09:00:00',
+    createdAt: '2026-07-14T09:00:00Z',
     fileSizeBytes: 1024,
     sampleCount: 351,
     baseCount: 100,

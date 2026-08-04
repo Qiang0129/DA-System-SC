@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 import hashlib
 import secrets
 
@@ -7,15 +7,12 @@ from fastapi import Response
 from jose import JWTError, jwt
 
 from .config import get_settings
+from .time_utils import utc_now
 
 
 REFRESH_COOKIE_NAME = "soft_web_refresh"
 REFRESH_COOKIE_PATH = "/api/auth"
 REFRESH_COOKIE_SAMESITE = "lax"
-
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def hash_password(password: str) -> str:

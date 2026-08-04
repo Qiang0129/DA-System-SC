@@ -1,4 +1,5 @@
 import { GitCompareArrows, Star } from 'lucide-react';
+import { formatLocalDateTime } from '../../../utils/time';
 import { getTaskPriorityLabel, type TaskLocalMetaMap } from '../taskLocalMeta';
 import type { AnalysisTask } from '../types';
 import {
@@ -172,7 +173,7 @@ export function TaskTable({
                       </div>
                     </td>
                     <td className="task-stage-cell">{stageLabel(task.currentStage)}</td>
-                    <td>{task.createdAt || '-'}</td>
+                    <td>{formatLocalDateTime(task.createdAt)}</td>
                     <td>{formatRuntime(task.runtimeSeconds)}</td>
                     <td>
                       <div className="task-row-actions">

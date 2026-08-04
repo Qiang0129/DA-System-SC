@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { authorizedFetch } from './api/auth';
 import { SelectField } from './components/SelectField';
+import { formatLocalDateTime } from './utils/time';
 
 const DATASET_RENDER_LIMIT = 60;
 const DATASET_TYPE_OPTIONS = [
@@ -172,7 +173,7 @@ function DatasetRenameDialog({ dataset, onClose, onSubmit }: RenameDialogProps) 
         </div>
 
         <div className="dataset-rename-summary" aria-label="当前数据集信息">
-          <span>{dataset.createdAt}</span>
+          <span>{formatLocalDateTime(dataset.createdAt)}</span>
           <span>{formatFileSize(dataset.fileSizeBytes)}</span>
           <span>{dataset.dataType}</span>
           <span className={`dataset-label-tag ${dataset.hasLabels ? 'has-labels' : ''}`}>
@@ -364,7 +365,7 @@ function getDatasetLabelSummary(dataset: DatasetCatalogItem) {
 
 function getDatasetUsageSummary(dataset: DatasetCatalogItem) {
   if (dataset.taskCount <= 0) return '未使用';
-  return `${dataset.taskCount} 任务 · ${dataset.lastAnalysisAt ?? '—'}`;
+  return `${dataset.taskCount} 任务 · ${formatLocalDateTime(dataset.lastAnalysisAt)}`;
 }
 
 function getDatasetQualityPresentation(dataset: DatasetCatalogItem) {
@@ -471,7 +472,7 @@ function DatasetCardGrid({
               <div className="dataset-card-top">
                 <div className="dataset-card-title-block">
                   <strong>{d.name}</strong>
-                  <small>{d.createdAt} · {formatFileSize(d.fileSizeBytes)}</small>
+                  <small>{formatLocalDateTime(d.createdAt)} · {formatFileSize(d.fileSizeBytes)}</small>
                 </div>
                 <span className="dataset-type-tag dataset-card-type">{d.dataType}</span>
               </div>
@@ -701,7 +702,7 @@ function DatasetCatalogView({
                 <div className="dataset-list-item-name">
                   <strong title={d.name}>{d.name}</strong>
                   <small>
-                    {d.createdAt} · {formatFileSize(d.fileSizeBytes)} · v{d.version}
+                    {formatLocalDateTime(d.createdAt)} · {formatFileSize(d.fileSizeBytes)} · v{d.version}
                   </small>
                 </div>
                 <span className="dataset-list-metric" aria-label="规模 n m c">
@@ -848,7 +849,7 @@ function DatasetDetailView({
             <div className="dataset-detail-identity">
               <h2>{dataset.name}</h2>
               <div className="dataset-detail-meta" aria-label={`${dataset.name} 基本信息`}>
-                <span>{dataset.createdAt}</span>
+                <span>{formatLocalDateTime(dataset.createdAt)}</span>
                 <span>{formatFileSize(dataset.fileSizeBytes)}</span>
                 <span>{dataset.dataType}</span>
                 <span className={`dataset-label-tag ${dataset.hasLabels ? 'has-labels' : ''}`}>

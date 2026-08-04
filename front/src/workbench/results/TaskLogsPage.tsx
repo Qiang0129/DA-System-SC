@@ -21,6 +21,13 @@ import {
 } from '../WorkbenchUi';
 import { formatRuntime, getStatusMeta, getTaskRunProgress } from '../tasks/taskStatus';
 import type { AnalysisTaskLog } from '../tasks/types';
+import {
+  formatLocalClock,
+  formatLocalDate,
+  formatLocalDateTime,
+  utcDateTimeAttribute,
+  utcTimestamp,
+} from '../../utils/time';
 import { downloadTextFile } from './resultPresentation';
 import { ResultBackButton, useShouldShowResultBack } from './ResultPageShared';
 import type { TaskResultResource } from './types';
@@ -66,10 +73,8 @@ function getTaskTone(status: string): StatusTone {
   return 'neutral';
 }
 
-// 后端日志时间可能是带空格的数据库格式，也可能是标准 ISO 字符串；统一后再排序，解析失败时使用 id 保证顺序稳定。
 function getTimestamp(value: string) {
-  const timestamp = Date.parse(value.includes('T') ? value : value.replace(' ', 'T'));
-  return Number.isNaN(timestamp) ? null : timestamp;
+  return utcTimestamp(value);
 }
 
 function compareLogs(left: AnalysisTaskLog, right: AnalysisTaskLog) {
@@ -79,12 +84,6 @@ function compareLogs(left: AnalysisTaskLog, right: AnalysisTaskLog) {
     return leftTimestamp - rightTimestamp;
   }
   return left.id - right.id;
-}
-
-function splitDateTime(value: string) {
-  const normalized = value.replace('T', ' ').replace(/Z$/, '');
-  const [date = value, time = ''] = normalized.split(' ');
-  return { date, time };
 }
 
 function formatCoverage(logs: AnalysisTaskLog[]) {
@@ -110,7 +109,7 @@ function escapeCsv(value: unknown) {
 export function buildTaskLogsCsv(logs: AnalysisTaskLog[]) {
   const rows = [
     ['级别', '事件', '内容', '时间'],
-    ...logs.map((log) => [log.level, log.action, log.message, log.createdAt]),
+    ...logs.map((log) => [log.level, log.action, log.message, formatLocalDateTime(log.createdAt)]),
   ];
   return `\uFEFF${rows.map((row) => row.map(escapeCsv).join(',')).join('\n')}`;
 }
@@ -342,7 +341,6 @@ export function TaskLogsPage({ resource }: { resource: TaskResultResource }) {
                 {logs.map((log) => {
                   const levelPresentation = getLevelPresentation(log.level);
                   const eventLabel = ACTION_LABELS[log.action] ?? log.action;
-                  const dateTime = splitDateTime(log.createdAt);
                   const runNumber = extractRunNumber(log);
                   return (
                     <li className={`task-log-event level-${levelPresentation.key}`} key={log.id}>
@@ -362,9 +360,9 @@ export function TaskLogsPage({ resource }: { resource: TaskResultResource }) {
                           ) : null}
                         </div>
                       </div>
-                      <time dateTime={log.createdAt.includes('T') ? log.createdAt : log.createdAt.replace(' ', 'T')}>
-                        <span>{dateTime.date}</span>
-                        <strong>{dateTime.time || '—'}</strong>
+                      <time dateTime={utcDateTimeAttribute(log.createdAt)}>
+                        <span>{formatLocalDate(log.createdAt)}</span>
+                        <strong>{formatLocalClock(log.createdAt)}</strong>
                       </time>
                     </li>
                   );
@@ -387,10 +385,10 @@ export function TaskLogsPage({ resource }: { resource: TaskResultResource }) {
 
           <div className="task-log-time-range">
             <h3>日志覆盖范围</h3>
-            <div><span>首个事件</span><time>{firstLog?.createdAt ?? '—'}</time></div>
-            <div><span>最新事件</span><time>{latestLog?.createdAt ?? '—'}</time></div>
-            <div><span>任务开始</span><time>{task.startedAt ?? '—'}</time></div>
-            <div><span>任务结束</span><time>{task.finishedAt ?? '—'}</time></div>
+            <div><span>首个事件</span><time>{formatLocalDateTime(firstLog?.createdAt)}</time></div>
+            <div><span>最新事件</span><time>{formatLocalDateTime(latestLog?.createdAt)}</time></div>
+            <div><span>任务开始</span><time>{formatLocalDateTime(task.startedAt)}</time></div>
+            <div><span>任务结束</span><time>{formatLocalDateTime(task.finishedAt)}</time></div>
           </div>
         </aside>
       </div>

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 
@@ -46,7 +46,7 @@ def _create_task(session_factory, storage_path, *, status="queued", worker_id=No
             mode="OMELET",
             status=status,
             params_json=json.dumps({"nBase": 2, "runs": 1, "maxIter": 2}),
-            queued_at=datetime.now(),
+            queued_at=datetime.now(timezone.utc),
             worker_id=worker_id,
             heartbeat_at=heartbeat_at,
         )
@@ -88,14 +88,14 @@ def test_recovery_only_requeues_stale_running_tasks_and_increments_retry(tmp_pat
         tmp_path / "fresh.mat",
         status="running",
         worker_id="live-worker",
-        heartbeat_at=datetime.now(),
+        heartbeat_at=datetime.now(timezone.utc),
     )
     stale_id, _ = _create_task(
         session_factory,
         tmp_path / "stale.mat",
         status="running",
         worker_id="dead-worker",
-        heartbeat_at=datetime.now() - timedelta(minutes=10),
+        heartbeat_at=datetime.now(timezone.utc) - timedelta(minutes=10),
     )
     manager = task_executor_module.TaskExecutionManager()
     manager._recover_interrupted_tasks()
@@ -118,7 +118,7 @@ def test_non_owner_cannot_update_progress_or_failure(tmp_path, monkeypatch):
         tmp_path / "owned.mat",
         status="running",
         worker_id="another-worker",
-        heartbeat_at=datetime.now(),
+        heartbeat_at=datetime.now(timezone.utc),
     )
     manager = task_executor_module.TaskExecutionManager()
     manager._persist_progress(task_id, {"type": "iteration", "progress": 80, "iteration": 8})
@@ -141,7 +141,7 @@ def test_duplicate_result_persistence_keeps_first_result(tmp_path, monkeypatch):
         tmp_path / "result-data.mat",
         status="running",
         worker_id=None,
-        heartbeat_at=datetime.now(),
+        heartbeat_at=datetime.now(timezone.utc),
     )
     manager = task_executor_module.TaskExecutionManager()
     with session_factory() as session:
@@ -192,7 +192,7 @@ def test_task_timeout_marks_failure_and_cleans_temporary_directory(tmp_path, mon
         tmp_path / "timeout-data.mat",
         status="running",
         worker_id=None,
-        heartbeat_at=datetime.now(),
+        heartbeat_at=datetime.now(timezone.utc),
     )
     manager = task_executor_module.TaskExecutionManager()
     with session_factory() as session:

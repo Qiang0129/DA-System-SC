@@ -1,7 +1,7 @@
 import io
 import json
 import zipfile
-from datetime import datetime
+from datetime import datetime, timezone
 
 import numpy as np
 import scipy.io as sio
@@ -225,7 +225,7 @@ def test_progress_event_advances_run_and_resets_iteration(monkeypatch):
             max_iter=10,
             params_json='{"runs": 10}',
             worker_id=manager.worker_id,
-            heartbeat_at=datetime.now(),
+            heartbeat_at=datetime.now(timezone.utc),
         )
         session.add(task)
         session.commit()

@@ -18,6 +18,7 @@ import {
   startTask,
 } from '../../api/tasks';
 import { TaskBulkBar } from './components/TaskBulkBar';
+import { formatLocalDateTime } from '../../utils/time';
 import { TaskCompareTray } from './components/TaskCompareTray';
 import { TaskCreateDrawer } from './components/TaskCreateDrawer';
 import { TaskDetailDrawer } from './components/TaskDetailDrawer';
@@ -180,7 +181,7 @@ export function TaskCenterPage() {
         task.status,
         JSON.stringify(task.datasetName),
         task.progress,
-        task.createdAt,
+        formatLocalDateTime(task.createdAt),
         task.runtimeSeconds ?? '',
       ].join(','),
     );

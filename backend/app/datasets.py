@@ -26,6 +26,7 @@ from .auth import get_current_user
 from .config import get_settings
 from .database import get_session
 from .models import AnalysisTask, Dataset, DatasetQuality, DatasetRevision, OperationLog, User
+from .time_utils import format_utc_iso, utc_now
 from .schemas import (
     DatasetBulkRequest,
     DatasetCatalogItemResponse,
@@ -630,14 +631,14 @@ def _catalog_item(
     return DatasetCatalogItemResponse(
         id=dataset.id,
         name=dataset.name,
-        createdAt=dataset.created_at.strftime("%Y-%m-%d %H:%M:%S") if dataset.created_at else "",
+        createdAt=format_utc_iso(dataset.created_at) or "",
         fileSizeBytes=_stored_file_size(dataset),
         sampleCount=sample_count,
         baseCount=base_count,
         classCount=class_count,
         hasLabels=has_labels,
         taskCount=task_count,
-        lastAnalysisAt=last_analysis_at.strftime("%Y-%m-%d %H:%M:%S") if last_analysis_at else None,
+        lastAnalysisAt=format_utc_iso(last_analysis_at),
         version=int(current_version or 1),
         qualityStatus=quality.status,
         qualityIssues=_decode_issues(quality.issues_json),
@@ -1092,7 +1093,7 @@ async def replace_dataset_file(
         dataset.has_ground_truth = parsed["hasLabels"]
         dataset.cluster_count = parsed["classCount"] if parsed["hasLabels"] else None
         dataset.status = "ready"
-        dataset.created_at = datetime.now().replace(microsecond=0)
+        dataset.created_at = utc_now().replace(microsecond=0)
 
         session.flush()
         quality = _upsert_quality(session, dataset, parsed)
@@ -1273,7 +1274,7 @@ def _revision_response(revision: DatasetRevision) -> DatasetRevisionResponse:
         action=revision.action,
         name=revision.name,
         originalFilename=revision.original_filename,
-        createdAt=revision.created_at.strftime("%Y-%m-%d %H:%M:%S") if revision.created_at else "",
+        createdAt=format_utc_iso(revision.created_at) or "",
         sampleCount=revision.sample_count,
         baseCount=revision.base_cluster_count,
         classCount=revision.cluster_count or 0,

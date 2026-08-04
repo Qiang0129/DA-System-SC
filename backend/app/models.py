@@ -1,10 +1,11 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import BigInteger, Boolean, Float, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.dialects import mysql
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
+from .time_utils import UTCDateTime, utc_now
 
 
 # 既有 MySQL 库的用户和数据集主键为 BIGINT UNSIGNED；SQLite 测试保留 INTEGER 才能正常自增。
@@ -24,12 +25,13 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(32), default="user")
     status: Mapped[str] = mapped_column(String(32), default="active", index=True)
-    last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    last_login_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utc_now, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
+        UTCDateTime(),
+        default=utc_now,
         server_default=func.now(),
-        onupdate=func.now(),
+        onupdate=utc_now,
     )
 
     sessions: Mapped[list["UserSession"]] = relationship(back_populates="user")
@@ -46,9 +48,11 @@ class EmailVerificationCode(Base):
     purpose: Mapped[str] = mapped_column(String(32), default="register", index=True)
     code_hash: Mapped[str] = mapped_column(String(255))
     client_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
-    consumed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime(), index=True)
+    consumed_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), default=utc_now, server_default=func.now(), index=True,
+    )
 
 
 class UserSession(Base):
@@ -57,9 +61,9 @@ class UserSession(Base):
     id: Mapped[int] = mapped_column(IDENTIFIER_TYPE, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(IDENTIFIER_TYPE, ForeignKey("users.id", ondelete="CASCADE"), index=True)
     refresh_token_hash: Mapped[str] = mapped_column(String(255), unique=True)
-    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
-    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime(), index=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utc_now, server_default=func.now())
 
     user: Mapped[User] = relationship(back_populates="sessions")
 
@@ -78,7 +82,9 @@ class Dataset(Base):
     has_ground_truth: Mapped[bool] = mapped_column(Boolean, default=False)
     cluster_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="ready", index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), default=utc_now, server_default=func.now(), index=True,
+    )
 
     user: Mapped[User] = relationship(back_populates="datasets")
 
@@ -100,7 +106,9 @@ class DatasetRevision(Base):
     cluster_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     quality_status: Mapped[str] = mapped_column(String(16), default="ready")
     quality_issues_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), default=utc_now, server_default=func.now(), index=True,
+    )
 
 
 class DatasetQuality(Base):
@@ -115,7 +123,9 @@ class DatasetQuality(Base):
     )
     status: Mapped[str] = mapped_column(String(16), default="ready", index=True)
     issues_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    checked_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    checked_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), default=utc_now, server_default=func.now(), onupdate=utc_now,
+    )
 
 
 class AnalysisTask(Base):
@@ -146,16 +156,19 @@ class AnalysisTask(Base):
     failure_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
     current_stage: Mapped[str | None] = mapped_column(String(64), nullable=True)
     worker_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
-    queued_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+    queued_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True, index=True)
+    started_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), default=utc_now, server_default=func.now(), index=True,
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
+        UTCDateTime(),
+        default=utc_now,
         server_default=func.now(),
-        onupdate=func.now(),
+        onupdate=utc_now,
     )
 
 
@@ -179,7 +192,7 @@ class TaskResult(Base):
     s_matrix_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     z_matrix_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     runtime_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utc_now, server_default=func.now())
 
 
 class TaskExport(Base):
@@ -194,7 +207,7 @@ class TaskExport(Base):
     filename: Mapped[str] = mapped_column(String(255))
     storage_path: Mapped[str] = mapped_column(String(500))
     file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utc_now, server_default=func.now())
 
 
 class TaskTemplate(Base):
@@ -207,7 +220,9 @@ class TaskTemplate(Base):
     name: Mapped[str] = mapped_column(String(128))
     mode: Mapped[str] = mapped_column(String(32), default="OMELET-SV")
     params_json: Mapped[str] = mapped_column(Text, default="{}")
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), default=utc_now, server_default=func.now(), index=True,
+    )
 
 
 class OperationLog(Base):
@@ -225,4 +240,6 @@ class OperationLog(Base):
     level: Mapped[str] = mapped_column(String(16), default="info")
     message: Mapped[str] = mapped_column(String(500))
     detail_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), default=utc_now, server_default=func.now(), index=True,
+    )

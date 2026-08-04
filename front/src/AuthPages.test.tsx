@@ -64,7 +64,7 @@ function jsonResponse(body: unknown, ok = true) {
 function turnstilePassResponse(token = 'turnstile-pass-token') {
   return jsonResponse({
     turnstile_pass_token: token,
-    expires_at: '2026-07-29T12:00:00',
+    expires_at: '2026-07-29T12:00:00Z',
     expires_in_seconds: 300,
   });
 }

@@ -4,7 +4,7 @@ Revision ID: 20260804_0002
 Revises: 20260804_0001
 Create Date: 2026-08-04
 """
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 from typing import Sequence, Union
 
@@ -193,7 +193,7 @@ def _migrate_legacy_drafts(bind) -> tuple[int, int]:
 
     existing_markers = _read_legacy_markers(bind)
     inserted_rows = 0
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     for row in rows:
         legacy_id = int(row["id"])

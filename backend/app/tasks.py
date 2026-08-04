@@ -48,6 +48,7 @@ from .schemas import (
     TaskTemplateResponse,
 )
 from .task_executor import task_execution_manager
+from .time_utils import format_utc_iso, utc_now
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
@@ -68,13 +69,11 @@ PIPELINE_STAGES = [
 
 
 def _now() -> datetime:
-    return datetime.now().replace(microsecond=0)
+    return utc_now().replace(microsecond=0)
 
 
 def _format_dt(value: datetime | None) -> str | None:
-    if value is None:
-        return None
-    return value.strftime("%Y-%m-%d %H:%M:%S")
+    return format_utc_iso(value)
 
 
 def _load_json(value: str | None, default: Any) -> Any:
@@ -740,7 +739,7 @@ def create_task_export(
     source_dir = _safe_artifact_path(result, "labels").parent
     export_dir = source_dir / "exports"
     export_dir.mkdir(parents=True, exist_ok=True)
-    created_at = datetime.now()
+    created_at = utc_now()
     archive_name = (payload.name or "").strip() or f"任务 #{task_id} 交付档案"
     filename = f"omelet-task-{task_id}-{created_at.strftime('%Y%m%d%H%M%S')}.zip"
     export_path = export_dir / filename
@@ -756,7 +755,7 @@ def create_task_export(
                 "datasetId": task.dataset_id,
                 "mode": task.mode,
                 "items": selected,
-                "createdAt": created_at.isoformat(timespec="seconds"),
+                "createdAt": format_utc_iso(created_at),
             }),
         )
         if "metrics" in selected:

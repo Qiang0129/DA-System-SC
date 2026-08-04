@@ -13,11 +13,11 @@ vi.mock('./resultPresentation', async () => {
 });
 
 const logs = [
-  { id: 5, level: 'error', action: 'task_failed', message: '参数 "gamma", 超出范围', createdAt: '2026-07-16 20:46:35' },
-  { id: 3, level: 'warning', action: 'data_warning', message: '输入数据包含需要复核的记录', createdAt: '2026-07-16 20:46:32' },
-  { id: 1, level: 'info', action: 'task_queued', message: '任务已进入执行队列', createdAt: '2026-07-16 20:46:30' },
-  { id: 4, level: 'info', action: 'task_run_completed', message: '第 2 轮实验完成', createdAt: '2026-07-16 20:46:34' },
-  { id: 2, level: 'info', action: 'task_run_completed', message: '第 1 轮实验完成', createdAt: '2026-07-16 20:46:31' },
+  { id: 5, level: 'error', action: 'task_failed', message: '参数 "gamma", 超出范围', createdAt: '2026-07-16T20:46:35Z' },
+  { id: 3, level: 'warning', action: 'data_warning', message: '输入数据包含需要复核的记录', createdAt: '2026-07-16T20:46:32Z' },
+  { id: 1, level: 'info', action: 'task_queued', message: '任务已进入执行队列', createdAt: '2026-07-16T20:46:30Z' },
+  { id: 4, level: 'info', action: 'task_run_completed', message: '第 2 轮实验完成', createdAt: '2026-07-16T20:46:34Z' },
+  { id: 2, level: 'info', action: 'task_run_completed', message: '第 1 轮实验完成', createdAt: '2026-07-16T20:46:31Z' },
 ];
 
 function createResource(overrides: Partial<TaskResultResource> = {}): TaskResultResource {
@@ -41,10 +41,10 @@ function createResource(overrides: Partial<TaskResultResource> = {}): TaskResult
         datasetName: '材料数据集',
         params: { runs: 3 },
         runtimeSeconds: 5,
-        createdAt: '2026-07-16 20:46:20',
-        startedAt: '2026-07-16 20:46:29',
-        finishedAt: '2026-07-16 20:46:35',
-        updatedAt: '2026-07-16 20:46:35',
+        createdAt: '2026-07-16T20:46:20Z',
+        startedAt: '2026-07-16T20:46:29Z',
+        finishedAt: '2026-07-16T20:46:35Z',
+        updatedAt: '2026-07-16T20:46:35Z',
       },
       result: null,
     },

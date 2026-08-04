@@ -21,6 +21,7 @@ import {
   type DatasetRevision,
 } from '../../api/datasets';
 import { SelectField } from '../../components/SelectField';
+import { formatLocalDateTime } from '../../utils/time';
 
 type QueryPatch = {
   datasetId?: number | null;
@@ -460,7 +461,7 @@ export function DatasetVersionsPage() {
                         <strong>
                           v{revision.version} · {action.label}
                         </strong>
-                        <time>{revision.createdAt || '时间未知'}</time>
+                        <time>{formatLocalDateTime(revision.createdAt)}</time>
                       </span>
                       <span className={`versions-rail-state ${revision.qualityStatus}`}>
                         {index === 0 ? '当前' : QUALITY_LABELS[revision.qualityStatus]}
@@ -496,7 +497,7 @@ export function DatasetVersionsPage() {
                 <div className="versions-revision-meta">
                   <span>
                     <FileClock size={14} aria-hidden="true" />
-                    {selectedRevision.createdAt || '时间未知'}
+                    {formatLocalDateTime(selectedRevision.createdAt)}
                   </span>
                   <RevisionQualityBadge status={selectedRevision.qualityStatus} />
                   <span>{selectedRevision.originalFilename}</span>

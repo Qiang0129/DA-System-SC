@@ -30,6 +30,7 @@ import {
 import { MathFormula } from '../../components/MathFormula';
 import { SelectField } from '../../components/SelectField';
 import { createTaskExport, downloadProtectedFile, fetchTaskExports } from '../../api/results';
+import { formatLocalDateTime } from '../../utils/time';
 import {
   WorkbenchMetricStrip,
   WorkbenchNotice,
@@ -879,7 +880,7 @@ export function ExportResultPage({ resource }: { resource: TaskResultResource })
                     <div>{exportItemLabels(item.items).map((label) => <span key={label}>{label}</span>)}</div>
                   </div>
                   <div className="result-export-archive-meta">
-                    <span>{item.itemCount || '旧版'} 项</span><strong>{formatBytes(item.fileSize)}</strong><time>{item.createdAt}</time>
+                    <span>{item.itemCount || '旧版'} 项</span><strong>{formatBytes(item.fileSize)}</strong><time>{formatLocalDateTime(item.createdAt)}</time>
                   </div>
                   <WorkbenchStatus tone="success">{item.status === 'ready' ? '可下载' : item.status}</WorkbenchStatus>
                   <button type="button" className="btn btn-secondary" onClick={() => void downloadProtectedFile(item.downloadUrl, item.filename)}><Download size={14} />下载</button>
@@ -945,7 +946,7 @@ export function ReportResultPage({ resource }: { resource: TaskResultResource })
     taskId: task.id,
     dataset: task.datasetName,
     mode: task.mode,
-    finishedAt: task.finishedAt,
+    finishedAt: formatLocalDateTime(task.finishedAt),
     runtimeSeconds: result.runtimeSeconds,
     summary: result.preview.summary,
     metrics: result.metrics.aggregate,
@@ -1019,7 +1020,7 @@ export function ReportResultPage({ resource }: { resource: TaskResultResource })
             )}
           />
           <article className="report-document result-report-document">
-            <header><span>OMELET LAB · ANALYSIS REPORT</span><strong>{title || '未命名报告'}</strong><small>任务 #{task.id} · {task.finishedAt ?? '未完成'}</small></header>
+            <header><span>OMELET LAB · ANALYSIS REPORT</span><strong>{title || '未命名报告'}</strong><small>任务 #{task.id} · {task.finishedAt ? formatLocalDateTime(task.finishedAt) : '未完成'}</small></header>
             {sections.includes('summary') ? (
               <ReportPreviewSection section="summary" title="任务摘要" meta={reportSectionMeta.summary} expanded={expandedSections.includes('summary')} onToggle={togglePreviewSection}>
                 <div className="report-document-summary"><div><span>数据集</span><strong>{task.datasetName}</strong></div><div><span>算法</span><strong>{task.mode}</strong></div><div><span>样本</span><strong>{result.preview.summary.sampleCount}</strong></div><div><span>类别</span><strong>{result.preview.summary.classCount}</strong></div><div><span>基础聚类</span><strong>{result.preview.summary.baseClusterCount}</strong></div><div><span>耗时</span><strong>{formatNumber(result.runtimeSeconds, 2)} s</strong></div></div>

@@ -36,10 +36,10 @@ const task = {
   failureReason: null,
   metricsSummary: null,
   runtimeSeconds: 8.5,
-  createdAt: '2026-07-13 10:00:00',
-  startedAt: '2026-07-13 10:01:00',
+  createdAt: '2026-07-13T10:00:00Z',
+  startedAt: '2026-07-13T10:01:00Z',
   finishedAt: null,
-  updatedAt: '2026-07-13 10:01:30',
+  updatedAt: '2026-07-13T10:01:30Z',
 };
 
 vi.mock('../../api/tasks', () => ({

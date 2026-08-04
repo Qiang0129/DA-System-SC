@@ -20,6 +20,7 @@ from sqlalchemy import or_, select, update
 from .config import get_settings
 from .database import SessionLocal
 from .models import AnalysisTask, Dataset, OperationLog, TaskResult
+from .time_utils import utc_now
 
 
 EVENT_PREFIX = "OMELET_EVENT "
@@ -27,7 +28,7 @@ TERMINAL_STATUSES = {"succeeded", "failed", "cancelled"}
 
 
 def _now() -> datetime:
-    return datetime.now().replace(microsecond=0)
+    return utc_now().replace(microsecond=0)
 
 
 def _load_json(value: str | None, default: Any) -> Any:

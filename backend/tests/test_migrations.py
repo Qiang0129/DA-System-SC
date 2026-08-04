@@ -84,6 +84,9 @@ def test_upgrade_head_creates_current_schema_and_version(tmp_path):
         version_rows = connection.execute(text("SELECT version_num FROM alembic_version")).scalars().all()
     assert set(version_rows) == set(get_alembic_heads())
 
+    schema_migration_columns = {column["name"] for column in inspector.get_columns("schema_migrations")}
+    assert "metadata_json" in schema_migration_columns
+
 
 def test_p001_migrates_legacy_drafts_once_and_keeps_old_table(tmp_path):
     database_path = tmp_path / "legacy.sqlite3"
@@ -178,3 +181,84 @@ def test_startup_migration_check_accepts_head(tmp_path):
     database_path = tmp_path / "current.sqlite3"
     _upgrade(database_path)
     ensure_database_is_current(_engine(database_path))
+
+
+def test_p101_converts_local_timestamps_once_and_preserves_auth_utc(tmp_path, monkeypatch):
+    database_path = tmp_path / "utc-timestamps.sqlite3"
+    _upgrade(database_path, "20260804_0003")
+
+    engine = _engine(database_path)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users "
+                "(username, email, password_hash, last_login_at, created_at, updated_at) "
+                "VALUES ('utc-owner', 'utc@example.test', 'hash', :last_login, :created_at, :updated_at)",
+            ),
+            {
+                "last_login": "2026-08-04 10:00:00",
+                "created_at": "2026-08-04 18:00:00",
+                "updated_at": "2026-08-04 19:00:00",
+            },
+        )
+        user_id = connection.execute(text("SELECT id FROM users WHERE username = 'utc-owner'")).scalar_one()
+        connection.execute(
+            text(
+                "INSERT INTO datasets "
+                "(user_id, name, original_filename, storage_path, file_hash, sample_count, base_cluster_count, created_at) "
+                "VALUES (:user_id, 'UTC dataset', 'utc.mat', '/tmp/utc.mat', 'hash', 4, 2, :created_at)",
+            ),
+            {"user_id": user_id, "created_at": "2026-08-04 20:00:00"},
+        )
+        dataset_id = connection.execute(text("SELECT id FROM datasets")).scalar_one()
+        connection.execute(
+            text(
+                "INSERT INTO analysis_tasks "
+                "(user_id, dataset_id, name, mode, status, params_json, created_at, updated_at, finished_at) "
+                "VALUES (:user_id, :dataset_id, 'UTC task', 'OMELET', 'succeeded', '{}', "
+                ":created_at, :updated_at, :finished_at)",
+            ),
+            {
+                "user_id": user_id,
+                "dataset_id": dataset_id,
+                "created_at": "2026-08-04 21:00:00",
+                "updated_at": "2026-08-04 21:01:00",
+                "finished_at": "2026-08-04 21:02:00",
+            },
+        )
+
+    monkeypatch.setenv("P1_01_SOURCE_OFFSET_SECONDS", "28800")
+    _upgrade(database_path)
+
+    with engine.connect() as connection:
+        user = connection.execute(
+            text("SELECT last_login_at, created_at, updated_at FROM users WHERE username = 'utc-owner'"),
+        ).mappings().one()
+        dataset = connection.execute(text("SELECT created_at FROM datasets")).scalar_one()
+        task = connection.execute(
+            text("SELECT created_at, updated_at, finished_at FROM analysis_tasks"),
+        ).mappings().one()
+        marker = connection.execute(
+            text(
+                "SELECT migrated_rows, metadata_json FROM schema_migrations "
+                "WHERE version = '20260804_p1_01_unify_utc_timestamps'",
+            ),
+        ).mappings().one()
+
+    assert user["last_login_at"] == "2026-08-04 10:00:00"
+    assert user["created_at"] == "2026-08-04 10:00:00"
+    assert user["updated_at"] == "2026-08-04 11:00:00"
+    assert dataset == "2026-08-04 12:00:00"
+    assert task["created_at"] == "2026-08-04 13:00:00"
+    assert task["updated_at"] == "2026-08-04 13:01:00"
+    assert task["finished_at"] == "2026-08-04 13:02:00"
+    assert json.loads(marker["metadata_json"])["sourceOffsetSeconds"] == 28800
+    assert marker["migrated_rows"] >= 6
+
+    command.stamp(_alembic_config(database_path), "20260804_0003")
+    _upgrade(database_path)
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT COUNT(*) FROM schema_migrations WHERE version = '20260804_p1_01_unify_utc_timestamps'"),
+        ).scalar_one() == 1
+        assert connection.execute(text("SELECT created_at FROM datasets")).scalar_one() == "2026-08-04 12:00:00"

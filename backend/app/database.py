@@ -1,6 +1,6 @@
 from collections.abc import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -33,7 +33,19 @@ def make_engine(database_url: str | None = None):
             },
         )
 
-    return create_engine(url, **kwargs)
+    created_engine = create_engine(url, **kwargs)
+
+    if created_engine.dialect.name == "mysql":
+        @event.listens_for(created_engine, "connect")
+        def _set_mysql_utc(dbapi_connection, connection_record) -> None:
+            """让数据库默认时间函数和直接 SQL 写入都使用 UTC。"""
+            cursor = dbapi_connection.cursor()
+            try:
+                cursor.execute("SET time_zone = '+00:00'")
+            finally:
+                cursor.close()
+
+    return created_engine
 
 
 def make_session_factory(engine):

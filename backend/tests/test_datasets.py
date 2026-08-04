@@ -1,7 +1,7 @@
 import io
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -348,7 +348,7 @@ def test_upload_dataset_persists_file_and_list_returns_saved_record(tmp_path, mo
     assert uploaded["classCount"] == 2
     assert uploaded["hasLabels"] is True
     assert uploaded["fileSizeBytes"] == len(payload)
-    assert re.match(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", uploaded["createdAt"])
+    assert re.match(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", uploaded["createdAt"])
     assert len(list(tmp_path.rglob("*.mat"))) == 1
 
     list_response = client.get("/api/datasets", headers=headers)
@@ -364,7 +364,7 @@ def test_upload_dataset_persists_file_and_list_returns_saved_record(tmp_path, mo
     assert listed["id"] == uploaded["id"]
     assert listed["name"] == "persisted_upload"
     assert listed["fileSizeBytes"] == len(payload)
-    assert re.match(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", listed["createdAt"])
+    assert re.match(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", listed["createdAt"])
     assert listed["sampleCount"] == 3
     assert listed["baseCount"] == 2
     assert listed["clusterStats"] == [
@@ -422,7 +422,7 @@ def test_update_dataset_replaces_file_and_metadata(tmp_path, monkeypatch):
     assert updated["classCount"] == 0
     assert updated["hasLabels"] is False
     assert updated["fileSizeBytes"] == len(updated_payload)
-    assert re.match(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", updated["createdAt"])
+    assert re.match(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", updated["createdAt"])
 
     saved_files = list(tmp_path.rglob("*.mat"))
     assert len(saved_files) == 2
@@ -596,9 +596,9 @@ def test_dataset_usage_uses_all_analysis_tasks_and_latest_success(tmp_path, monk
     draft_dataset = _upload_dataset(client, headers, "draft_only.mat", payload)
     unused_dataset = _upload_dataset(client, headers, "unused.mat", payload)
 
-    first_finished_at = datetime(2026, 8, 1, 10, 0, 0)
-    latest_finished_at = datetime(2026, 8, 3, 15, 30, 0)
-    failed_finished_at = datetime(2026, 8, 4, 9, 0, 0)
+    first_finished_at = datetime(2026, 8, 1, 10, 0, 0, tzinfo=timezone.utc)
+    latest_finished_at = datetime(2026, 8, 3, 15, 30, 0, tzinfo=timezone.utc)
+    failed_finished_at = datetime(2026, 8, 4, 9, 0, 0, tzinfo=timezone.utc)
     with testing_session_local() as session:
         user_id = session.scalar(select(User.id).where(User.username == "alice"))
         tasks = [
@@ -653,7 +653,7 @@ def test_dataset_usage_uses_all_analysis_tasks_and_latest_success(tmp_path, monk
     assert response.status_code == 200
     items = {item["id"]: item for item in response.json()["items"]}
     assert items[completed_dataset["id"]]["taskCount"] == 4
-    assert items[completed_dataset["id"]]["lastAnalysisAt"] == "2026-08-03 15:30:00"
+    assert items[completed_dataset["id"]]["lastAnalysisAt"] == "2026-08-03T15:30:00Z"
     assert items[draft_dataset["id"]]["taskCount"] == 1
     assert items[draft_dataset["id"]]["lastAnalysisAt"] is None
     assert items[unused_dataset["id"]]["taskCount"] == 0
@@ -702,7 +702,7 @@ def test_dataset_delete_is_blocked_by_analysis_tasks(tmp_path, monkeypatch):
             mode="OMELET-SV",
             status="succeeded",
             params_json="{}",
-            finished_at=datetime(2026, 8, 4, 10, 0, 0),
+            finished_at=datetime(2026, 8, 4, 10, 0, 0, tzinfo=timezone.utc),
         )
         draft_task = AnalysisTask(
             user_id=user_id,
