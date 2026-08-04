@@ -1,6 +1,7 @@
 import io
 import json
 import zipfile
+from datetime import datetime
 
 import numpy as np
 import scipy.io as sio
@@ -194,6 +195,7 @@ def test_progress_event_advances_run_and_resets_iteration(monkeypatch):
     testing_session_local = make_session_factory(engine)
     Base.metadata.create_all(bind=engine)
     monkeypatch.setattr(task_executor_module, "SessionLocal", testing_session_local)
+    manager = task_executor_module.TaskExecutionManager()
 
     with testing_session_local() as session:
         user = User(username="progress-user", password_hash="unused")
@@ -222,12 +224,13 @@ def test_progress_event_advances_run_and_resets_iteration(monkeypatch):
             current_iter=10,
             max_iter=10,
             params_json='{"runs": 10}',
+            worker_id=manager.worker_id,
+            heartbeat_at=datetime.now(),
         )
         session.add(task)
         session.commit()
         task_id = task.id
 
-    manager = task_executor_module.TaskExecutionManager()
     manager._persist_progress(task_id, {"type": "stage", "stage": "build_ca", "run": 2, "progress": 30})
 
     with testing_session_local() as session:

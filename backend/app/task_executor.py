@@ -518,14 +518,11 @@ class TaskExecutionManager:
                 select(AnalysisTask).where(
                     AnalysisTask.id == task_id,
                     AnalysisTask.status == "running",
-                    # 兼容迁移前直接写入的运行记录；正式领取任务始终带明确 worker_id。
-                    (AnalysisTask.worker_id == self.worker_id) | AnalysisTask.worker_id.is_(None),
+                    AnalysisTask.worker_id == self.worker_id,
                 ),
             )
             if task is None:
                 return
-            if task.worker_id is None:
-                task.worker_id = self.worker_id
             task.heartbeat_at = _now()
             progress = event.get("progress")
             if progress is not None:
