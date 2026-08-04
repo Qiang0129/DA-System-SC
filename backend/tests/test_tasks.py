@@ -6,10 +6,11 @@ from datetime import datetime, timezone
 import numpy as np
 import scipy.io as sio
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from app.config import get_settings
 from app.database import Base, get_session, make_engine, make_session_factory
-from app.models import AnalysisTask, Dataset, TaskResult, User
+from app.models import AnalysisTask, Dataset, OperationLog, StorageCleanupJob, TaskExport, TaskResult, User
 from main import app
 
 
@@ -343,3 +344,83 @@ def test_clone_retry_cancel_delete_and_template(tmp_path, monkeypatch):
     assert from_template.status_code == 200
     assert from_template.json()["mode"] == "OMELET-SV"
     assert from_template.json()["params"]["anchor"] == 6
+
+
+def test_delete_task_commits_records_before_cleaning_result_and_export_files(tmp_path, monkeypatch):
+    client = _make_test_client(tmp_path, monkeypatch)
+    monkeypatch.setattr(get_settings(), "result_storage_dir", tmp_path / "results")
+    headers = _register_and_headers(client, "cleanup-task-user")
+    dataset = _upload_dataset(client, headers)
+    task_response = client.post(
+        "/api/tasks",
+        headers=headers,
+        json={"datasetId": dataset["id"], "name": "cleanup task", "mode": "OMELET"},
+    )
+    task_id = task_response.json()["id"]
+
+    result_dir = tmp_path / "results" / "1" / str(task_id)
+    result_dir.mkdir(parents=True)
+    labels_path = result_dir / "labels.npz"
+    labels_path.write_bytes(b"labels")
+    export_path = result_dir / "exports" / "archive.zip"
+    export_path.parent.mkdir(parents=True)
+    export_path.write_bytes(b"export")
+
+    session_override = app.dependency_overrides[get_session]
+    session_generator = session_override()
+    session = next(session_generator)
+    try:
+        task = session.get(AnalysisTask, task_id)
+        assert task is not None
+        task.status = "succeeded"
+        user_id = task.user_id
+        session.add(
+            TaskResult(
+                schema_version=1,
+                task_id=task_id,
+                labels_path=str(labels_path),
+                ca_matrix_path=str(labels_path),
+                s_matrix_path=str(labels_path),
+                z_matrix_path=str(labels_path),
+            ),
+        )
+        session.add(
+            TaskExport(
+                task_id=task_id,
+                export_type="zip",
+                name="archive",
+                filename="archive.zip",
+                storage_path=str(export_path),
+            ),
+        )
+        session.add(
+            OperationLog(
+                user_id=user_id,
+                task_id=task_id,
+                action="before_delete",
+                message="before delete",
+            ),
+        )
+        session.commit()
+    finally:
+        session_generator.close()
+
+    response = client.delete(f"/api/tasks/{task_id}", headers=headers)
+    assert response.status_code == 200
+    assert "清理流程" in response.json()["message"]
+    assert not result_dir.exists()
+
+    session_generator = session_override()
+    session = next(session_generator)
+    try:
+        assert session.get(AnalysisTask, task_id) is None
+        assert session.scalar(select(TaskResult).where(TaskResult.task_id == task_id)) is None
+        assert session.scalar(select(TaskExport).where(TaskExport.task_id == task_id)) is None
+        logs = session.scalars(
+            select(OperationLog).where(OperationLog.action == "before_delete"),
+        ).all()
+        assert logs and logs[0].task_id is None
+        jobs = session.scalars(select(StorageCleanupJob)).all()
+        assert jobs and all(job.status == "succeeded" for job in jobs)
+    finally:
+        session_generator.close()

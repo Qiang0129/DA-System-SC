@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS datasets (
   KEY idx_datasets_user_id (user_id),
   KEY idx_datasets_status (status),
   KEY idx_datasets_created_at (created_at),
+  KEY idx_datasets_user_created_at (user_id, created_at),
   CONSTRAINT fk_datasets_user_id
     FOREIGN KEY (user_id) REFERENCES users(id)
     ON DELETE CASCADE
@@ -129,6 +130,7 @@ CREATE TABLE IF NOT EXISTS analysis_tasks (
   KEY idx_analysis_tasks_heartbeat_at (heartbeat_at),
   KEY idx_analysis_tasks_status_queued (status, queued_at, id),
   KEY idx_analysis_tasks_status_heartbeat (status, heartbeat_at),
+  KEY idx_analysis_tasks_user_status_queued (user_id, status, queued_at),
   CONSTRAINT fk_analysis_tasks_user_id
     FOREIGN KEY (user_id) REFERENCES users(id)
     ON DELETE CASCADE,
@@ -154,6 +156,7 @@ CREATE TABLE IF NOT EXISTS dataset_revisions (
   quality_issues_json JSON NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
+  UNIQUE KEY uk_dataset_revisions_dataset_version (dataset_id, version),
   KEY idx_dataset_revisions_dataset_id (dataset_id),
   KEY idx_dataset_revisions_created_at (created_at),
   CONSTRAINT fk_dataset_revisions_dataset_id
@@ -248,6 +251,7 @@ CREATE TABLE IF NOT EXISTS task_exports (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_task_exports_task_id (task_id),
+  KEY idx_task_exports_task_id_id (task_id, id),
   KEY idx_task_exports_export_type (export_type),
   CONSTRAINT fk_task_exports_task_id
     FOREIGN KEY (task_id) REFERENCES analysis_tasks(id)
@@ -274,4 +278,22 @@ CREATE TABLE IF NOT EXISTS operation_logs (
   CONSTRAINT fk_operation_logs_task_id
     FOREIGN KEY (task_id) REFERENCES analysis_tasks(id)
     ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS storage_cleanup_jobs (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  storage_path VARCHAR(500) NOT NULL,
+  storage_kind VARCHAR(32) NOT NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'pending',
+  attempts INT UNSIGNED NOT NULL DEFAULT 0,
+  last_error TEXT NULL,
+  next_attempt_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  completed_at DATETIME NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_storage_cleanup_jobs_storage_path (storage_path),
+  KEY idx_storage_cleanup_jobs_status_retry (status, next_attempt_at, id),
+  KEY idx_storage_cleanup_jobs_created_at (created_at),
+  KEY idx_storage_cleanup_jobs_status (status),
+  KEY idx_storage_cleanup_jobs_next_attempt_at (next_attempt_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -20,6 +20,7 @@ from sqlalchemy import or_, select, update
 from .config import get_settings
 from .database import SessionLocal
 from .models import AnalysisTask, Dataset, OperationLog, TaskResult
+from .storage_cleanup import process_pending_cleanup_jobs
 from .time_utils import utc_now
 
 
@@ -170,7 +171,15 @@ class TaskExecutionManager:
 
     def _dispatch_loop(self) -> None:
         poll_interval = max(0.2, float(get_settings().task_poll_interval_seconds))
+        last_cleanup_at = 0.0
         while not self._stop_event.is_set():
+            if time.monotonic() - last_cleanup_at >= 5.0:
+                try:
+                    process_pending_cleanup_jobs(limit=10)
+                except Exception:
+                    # 清理器故障不应阻断任务调度，下一轮继续尝试。
+                    pass
+                last_cleanup_at = time.monotonic()
             try:
                 claimed = self._claim_next_task()
             except Exception:
@@ -569,8 +578,7 @@ class TaskExecutionManager:
                 raise ValueError("任务结果包含不安全或不存在的产物路径")
 
         result_root = Path(get_settings().result_storage_dir).resolve()
-        final_dir = result_root / str(user_id) / str(task_id)
-        final_dir.parent.mkdir(parents=True, exist_ok=True)
+        final_dir: Path | None = None
         moved = False
         try:
             with SessionLocal() as session:
@@ -586,6 +594,13 @@ class TaskExecutionManager:
                 if task is None:
                     shutil.rmtree(temporary_dir, ignore_errors=True)
                     return
+
+                # 首次执行保持既有目录布局；重试使用同级独立目录，避免旧目录清理延迟时误删新结果。
+                retry_count = int(task.retry_count or 0)
+                final_dir = result_root / str(user_id) / str(task_id)
+                if retry_count > 0:
+                    final_dir = result_root / str(user_id) / f"{task_id}-attempt-{retry_count}"
+                final_dir.parent.mkdir(parents=True, exist_ok=True)
 
                 existing = session.scalar(
                     select(TaskResult).where(TaskResult.task_id == task_id).with_for_update(),
@@ -639,7 +654,7 @@ class TaskExecutionManager:
                 )
                 session.commit()
         except Exception:
-            if moved:
+            if moved and final_dir is not None:
                 shutil.rmtree(final_dir, ignore_errors=True)
             raise
 

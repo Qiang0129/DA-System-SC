@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, Float, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import BigInteger, Boolean, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects import mysql
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -70,6 +70,9 @@ class UserSession(Base):
 
 class Dataset(Base):
     __tablename__ = "datasets"
+    __table_args__ = (
+        Index("idx_datasets_user_created_at", "user_id", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(IDENTIFIER_TYPE, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(IDENTIFIER_TYPE, ForeignKey("users.id", ondelete="CASCADE"), index=True)
@@ -91,6 +94,9 @@ class Dataset(Base):
 
 class DatasetRevision(Base):
     __tablename__ = "dataset_revisions"
+    __table_args__ = (
+        UniqueConstraint("dataset_id", "version", name="uk_dataset_revisions_dataset_version"),
+    )
 
     id: Mapped[int] = mapped_column(IDENTIFIER_TYPE, primary_key=True, autoincrement=True)
     dataset_id: Mapped[int] = mapped_column(IDENTIFIER_TYPE, ForeignKey("datasets.id", ondelete="CASCADE"), index=True)
@@ -139,6 +145,7 @@ class AnalysisTask(Base):
         Index("idx_analysis_tasks_heartbeat_at", "heartbeat_at"),
         Index("idx_analysis_tasks_status_queued", "status", "queued_at", "id"),
         Index("idx_analysis_tasks_status_heartbeat", "status", "heartbeat_at"),
+        Index("idx_analysis_tasks_user_status_queued", "user_id", "status", "queued_at"),
     )
 
     id: Mapped[int] = mapped_column(IDENTIFIER_TYPE, primary_key=True, autoincrement=True)
@@ -174,13 +181,15 @@ class AnalysisTask(Base):
 
 class TaskResult(Base):
     __tablename__ = "task_results"
+    __table_args__ = (
+        UniqueConstraint("task_id", name="uk_task_results_task_id"),
+    )
 
     id: Mapped[int] = mapped_column(IDENTIFIER_TYPE, primary_key=True, autoincrement=True)
     schema_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     task_id: Mapped[int] = mapped_column(
         IDENTIFIER_TYPE,
         ForeignKey("analysis_tasks.id", ondelete="CASCADE"),
-        unique=True,
         index=True,
     )
     metrics_json: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -197,6 +206,9 @@ class TaskResult(Base):
 
 class TaskExport(Base):
     __tablename__ = "task_exports"
+    __table_args__ = (
+        Index("idx_task_exports_task_id_id", "task_id", "id"),
+    )
 
     id: Mapped[int] = mapped_column(IDENTIFIER_TYPE, primary_key=True, autoincrement=True)
     task_id: Mapped[int] = mapped_column(IDENTIFIER_TYPE, ForeignKey("analysis_tasks.id", ondelete="CASCADE"), index=True)
@@ -243,3 +255,30 @@ class OperationLog(Base):
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=utc_now, server_default=func.now(), index=True,
     )
+
+
+class StorageCleanupJob(Base):
+    """数据库提交后清理文件的事务性队列记录。"""
+
+    __tablename__ = "storage_cleanup_jobs"
+    __table_args__ = (
+        Index("idx_storage_cleanup_jobs_status_retry", "status", "next_attempt_at", "id"),
+        Index("idx_storage_cleanup_jobs_created_at", "created_at"),
+        Index("idx_storage_cleanup_jobs_status", "status"),
+        Index("idx_storage_cleanup_jobs_next_attempt_at", "next_attempt_at"),
+        UniqueConstraint("storage_path", name="uk_storage_cleanup_jobs_storage_path"),
+    )
+
+    id: Mapped[int] = mapped_column(IDENTIFIER_TYPE, primary_key=True, autoincrement=True)
+    storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    storage_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), default=utc_now, server_default=func.now(),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), default=utc_now, server_default=func.now(),
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)

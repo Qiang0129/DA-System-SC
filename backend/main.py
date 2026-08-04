@@ -1,3 +1,4 @@
+import logging
 import sys
 
 from fastapi import FastAPI
@@ -10,9 +11,11 @@ from app.database import engine
 from app.migrations import ensure_database_is_current
 from app.task_executor import task_execution_manager
 from app.tasks import router as tasks_router
+from app.storage_cleanup import process_pending_cleanup_jobs
 
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 
 def validate_startup_configuration(current_settings: Settings) -> None:
@@ -44,6 +47,10 @@ app.include_router(tasks_router)
 def validate_database_schema():
     """启动时只读核对迁移版本，数据库结构变更必须在部署步骤中完成。"""
     ensure_database_is_current(engine)
+    try:
+        process_pending_cleanup_jobs(limit=100)
+    except Exception:
+        logger.exception("启动时处理文件清理队列失败，调度 Worker 将继续重试")
     # pytest 使用独立内存库和依赖覆盖，不启动后台线程以免触碰本地开发数据库。
     if "pytest" not in sys.modules:
         task_execution_manager.start()

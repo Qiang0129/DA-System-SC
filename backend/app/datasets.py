@@ -26,6 +26,7 @@ from .auth import get_current_user
 from .config import get_settings
 from .database import get_session
 from .models import AnalysisTask, Dataset, DatasetQuality, DatasetRevision, OperationLog, User
+from .storage_cleanup import enqueue_cleanups, process_pending_cleanup_jobs
 from .time_utils import format_utc_iso, utc_now
 from .schemas import (
     DatasetBulkRequest,
@@ -894,7 +895,7 @@ def _ensure_quality_records(session: Session, datasets: list[Dataset]) -> None:
         session.commit()
 
 
-def _delete_datasets(session: Session, datasets: list[Dataset]) -> set[Path]:
+def _delete_datasets(session: Session, datasets: list[Dataset]) -> set[tuple[str, Path]]:
     dataset_ids = [dataset.id for dataset in datasets]
     task_count = session.scalar(
         select(func.count(AnalysisTask.id)).where(AnalysisTask.dataset_id.in_(dataset_ids)),
@@ -905,8 +906,11 @@ def _delete_datasets(session: Session, datasets: list[Dataset]) -> set[Path]:
     revision_paths = session.scalars(
         select(DatasetRevision.storage_path).where(DatasetRevision.dataset_id.in_(dataset_ids)),
     ).all()
-    storage_paths = {Path(path) for path in revision_paths}
-    storage_paths.update(Path(dataset.storage_path) for dataset in datasets)
+    cleanup_paths = {("dataset", Path(path)) for path in revision_paths}
+    cleanup_paths.update(("dataset", Path(dataset.storage_path)) for dataset in datasets)
+
+    # 文件清理任务和数据库删除必须处于同一事务；事务回滚时文件仍保持可用。
+    enqueue_cleanups(session, cleanup_paths)
 
     for dataset in datasets:
         session.delete(dataset)
@@ -915,7 +919,7 @@ def _delete_datasets(session: Session, datasets: list[Dataset]) -> set[Path]:
     except IntegrityError as exc:
         session.rollback()
         raise HTTPException(409, "数据集已被分析任务引用，请先删除关联任务后再删除数据集") from exc
-    return storage_paths
+    return cleanup_paths
 
 
 @router.get("", response_model=DatasetCatalogPageResponse)
@@ -1231,14 +1235,9 @@ def bulk_delete_datasets(
     if len(datasets) != len(set(payload.datasetIds)):
         raise HTTPException(404, "部分数据集不存在或无权访问")
 
-    storage_paths = _delete_datasets(session, datasets)
-    for storage_path in storage_paths:
-        try:
-            if storage_path.exists():
-                storage_path.unlink()
-        except OSError:
-            pass
-    return MessageResponse(message=f"已删除 {len(datasets)} 个数据集")
+    cleanup_paths = _delete_datasets(session, datasets)
+    process_pending_cleanup_jobs(limit=max(20, len(cleanup_paths)), bind=session.get_bind())
+    return MessageResponse(message=f"已删除 {len(datasets)} 个数据集，相关文件已进入清理流程")
 
 
 @router.post("/export")
@@ -1320,15 +1319,9 @@ def delete_dataset(
     session: Session = Depends(get_session),
 ):
     dataset = _get_user_dataset(session, dataset_id, user)
-    storage_paths = _delete_datasets(session, [dataset])
-    for storage_path in storage_paths:
-        try:
-            if storage_path.exists():
-                storage_path.unlink()
-        except OSError:
-            pass
-
-    return MessageResponse(message="数据集已删除")
+    cleanup_paths = _delete_datasets(session, [dataset])
+    process_pending_cleanup_jobs(limit=max(20, len(cleanup_paths)), bind=session.get_bind())
+    return MessageResponse(message="数据集已删除，相关文件已进入清理流程")
 
 
 @router.get("/example-mat")

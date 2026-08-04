@@ -47,6 +47,7 @@ def test_upgrade_head_creates_current_schema_and_version(tmp_path):
         "task_results",
         "task_exports",
         "operation_logs",
+        "storage_cleanup_jobs",
     }.issubset(tables)
 
     columns = {column["name"] for column in inspector.get_columns("analysis_tasks")}
@@ -78,7 +79,25 @@ def test_upgrade_head_creates_current_schema_and_version(tmp_path):
         "idx_analysis_tasks_heartbeat_at",
         "idx_analysis_tasks_status_queued",
         "idx_analysis_tasks_status_heartbeat",
+        "idx_analysis_tasks_user_status_queued",
     }.issubset(index_names)
+
+    dataset_indexes = {index["name"] for index in inspector.get_indexes("datasets")}
+    assert "idx_datasets_user_created_at" in dataset_indexes
+    revision_constraints = inspector.get_unique_constraints("dataset_revisions")
+    assert any(
+        constraint.get("name") == "uk_dataset_revisions_dataset_version"
+        and constraint.get("column_names") == ["dataset_id", "version"]
+        for constraint in revision_constraints
+    )
+    result_constraints = inspector.get_unique_constraints("task_results")
+    assert any(
+        constraint.get("name") == "uk_task_results_task_id"
+        and constraint.get("column_names") == ["task_id"]
+        for constraint in result_constraints
+    )
+    export_indexes = {index["name"] for index in inspector.get_indexes("task_exports")}
+    assert "idx_task_exports_task_id_id" in export_indexes
 
     with engine.connect() as connection:
         version_rows = connection.execute(text("SELECT version_num FROM alembic_version")).scalars().all()
@@ -181,6 +200,62 @@ def test_startup_migration_check_accepts_head(tmp_path):
     database_path = tmp_path / "current.sqlite3"
     _upgrade(database_path)
     ensure_database_is_current(_engine(database_path))
+
+
+def test_p104_blocks_duplicate_dataset_revision_versions(tmp_path):
+    database_path = tmp_path / "duplicate-revisions.sqlite3"
+    _upgrade(database_path, "20260804_0001")
+
+    engine = _engine(database_path)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users (username, email, password_hash) "
+                "VALUES ('duplicate-owner', 'duplicate@example.test', 'hash')",
+            ),
+        )
+        user_id = connection.execute(
+            text("SELECT id FROM users WHERE username = 'duplicate-owner'"),
+        ).scalar_one()
+        connection.execute(
+            text(
+                "INSERT INTO datasets "
+                "(user_id, name, original_filename, storage_path, file_hash, sample_count, base_cluster_count) "
+                "VALUES (:user_id, 'Duplicate dataset', 'duplicate.mat', '/tmp/duplicate.mat', 'hash', 4, 2)",
+            ),
+            {"user_id": user_id},
+        )
+        dataset_id = connection.execute(text("SELECT id FROM datasets")).scalar_one()
+        connection.execute(
+            text(
+                "INSERT INTO dataset_revisions "
+                "(dataset_id, version, action, name, original_filename, storage_path, file_hash, "
+                "sample_count, base_cluster_count) VALUES "
+                "(:dataset_id, 1, 'uploaded', 'Duplicate dataset', 'duplicate.mat', '/tmp/a.mat', 'a', 4, 2), "
+                "(:dataset_id, 1, 'replaced', 'Duplicate dataset', 'duplicate.mat', '/tmp/b.mat', 'b', 4, 2)",
+            ),
+            {"dataset_id": dataset_id},
+        )
+
+    with pytest.raises(RuntimeError, match="dataset_revisions"):
+        _upgrade(database_path)
+
+
+def test_p104_blocks_operation_log_orphans_before_finishing_upgrade(tmp_path):
+    database_path = tmp_path / "orphan-operation-logs.sqlite3"
+    _upgrade(database_path, "20260804_0004")
+
+    engine = _engine(database_path)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO operation_logs "
+                "(user_id, task_id, action, message) VALUES (NULL, 999999, 'orphan', 'invalid task reference')",
+            ),
+        )
+
+    with pytest.raises(RuntimeError, match="operation_logs"):
+        _upgrade(database_path)
 
 
 def test_p101_converts_local_timestamps_once_and_preserves_auth_utc(tmp_path, monkeypatch):

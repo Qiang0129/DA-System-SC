@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import io
 import math
-import shutil
 import zipfile
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -11,7 +10,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
-from sqlalchemy import and_, desc, func, or_, select
+from sqlalchemy import and_, desc, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from .auth import get_current_user
@@ -47,6 +46,7 @@ from .schemas import (
     TaskTemplateListResponse,
     TaskTemplateResponse,
 )
+from .storage_cleanup import enqueue_cleanups, process_pending_cleanup_jobs
 from .task_executor import task_execution_manager
 from .time_utils import format_utc_iso, utc_now
 
@@ -305,16 +305,33 @@ def _queue_task(
     )
 
 
-def _remove_result_directory(result: TaskResult | None) -> None:
-    if result is None or not result.labels_path:
-        return
-    root = Path(get_settings().result_storage_dir).resolve()
-    directory = Path(result.labels_path).resolve().parent
-    try:
-        directory.relative_to(root)
-    except ValueError:
-        return
-    shutil.rmtree(directory, ignore_errors=True)
+def _task_cleanup_paths(session: Session, task_id: int) -> set[tuple[str, Path]]:
+    """收集任务结果和导出文件，调用方必须在删除业务记录的事务中入队。"""
+    paths: set[tuple[str, Path]] = set()
+    results = session.scalars(select(TaskResult).where(TaskResult.task_id == task_id)).all()
+    for result in results:
+        for artifact_path in (
+            result.labels_path,
+            result.ca_matrix_path,
+            result.s_matrix_path,
+            result.z_matrix_path,
+        ):
+            if artifact_path:
+                paths.add(("result", Path(artifact_path).parent))
+
+    exports = session.scalars(select(TaskExport).where(TaskExport.task_id == task_id)).all()
+    for export in exports:
+        paths.add(("export", Path(export.storage_path)))
+    return paths
+
+
+def _detach_task_logs(session: Session, task_id: int) -> None:
+    """SQLite 测试库未必启用外键时，也保持 SET NULL 的业务语义。"""
+    session.execute(
+        update(OperationLog)
+        .where(OperationLog.task_id == task_id)
+        .values(task_id=None),
+    )
 
 
 def _template_response(template: TaskTemplate) -> TaskTemplateResponse:
@@ -741,53 +758,59 @@ def create_task_export(
     export_dir.mkdir(parents=True, exist_ok=True)
     created_at = utc_now()
     archive_name = (payload.name or "").strip() or f"任务 #{task_id} 交付档案"
-    filename = f"omelet-task-{task_id}-{created_at.strftime('%Y%m%d%H%M%S')}.zip"
+    # 精确到微秒，避免同一任务在同一秒内导出时覆盖前一个档案。
+    filename = f"omelet-task-{task_id}-{created_at.strftime('%Y%m%d%H%M%S%f')}.zip"
     export_path = export_dir / filename
     metrics = _load_json(result.metrics_json, {})
     preview = _load_json(result.preview_json, {})
-    with zipfile.ZipFile(export_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(
-            "manifest.json",
-            _dump_json({
-                "schemaVersion": 1,
-                "archiveName": archive_name,
-                "taskId": task_id,
-                "datasetId": task.dataset_id,
-                "mode": task.mode,
-                "items": selected,
-                "createdAt": format_utc_iso(created_at),
-            }),
-        )
-        if "metrics" in selected:
-            output = io.StringIO()
-            output.write("metric,mean,std,min,max\n")
-            for key, values in metrics.get("aggregate", {}).items():
-                output.write(
-                    f"{key},{values.get('mean','')},{values.get('std','')},{values.get('min','')},{values.get('max','')}\n",
-                )
-            archive.writestr("metrics.csv", output.getvalue().encode("utf-8-sig"))
-        if "parameters" in selected:
-            archive.writestr("parameters.json", _dump_json(_load_json(task.params_json, {})))
-        if "result" in selected:
+    try:
+        with zipfile.ZipFile(export_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             archive.writestr(
-                "result.json",
+                "manifest.json",
                 _dump_json({
-                    "metrics": metrics,
-                    "kernelWeights": _load_json(result.kernel_weights_json, {}),
-                    "convergence": _load_json(result.convergence_json, {}),
-                    "preview": preview,
+                    "schemaVersion": 1,
+                    "archiveName": archive_name,
+                    "taskId": task_id,
+                    "datasetId": task.dataset_id,
+                    "mode": task.mode,
+                    "items": selected,
+                    "createdAt": format_utc_iso(created_at),
                 }),
             )
-        artifact_map = {"labels": "labels-csv", "ca": "ca", "s": "s", "z": "z"}
-        for item in selected:
-            key = artifact_map.get(item)
-            if key:
-                path = _safe_artifact_path(result, key)
-                archive.write(path, arcname=path.name)
-    try:
-        export_path.resolve().relative_to(root)
-    except ValueError as exc:
-        raise HTTPException(500, "导出文件路径异常") from exc
+            if "metrics" in selected:
+                output = io.StringIO()
+                output.write("metric,mean,std,min,max\n")
+                for key, values in metrics.get("aggregate", {}).items():
+                    output.write(
+                        f"{key},{values.get('mean','')},{values.get('std','')},{values.get('min','')},{values.get('max','')}\n",
+                    )
+                archive.writestr("metrics.csv", output.getvalue().encode("utf-8-sig"))
+            if "parameters" in selected:
+                archive.writestr("parameters.json", _dump_json(_load_json(task.params_json, {})))
+            if "result" in selected:
+                archive.writestr(
+                    "result.json",
+                    _dump_json({
+                        "metrics": metrics,
+                        "kernelWeights": _load_json(result.kernel_weights_json, {}),
+                        "convergence": _load_json(result.convergence_json, {}),
+                        "preview": preview,
+                    }),
+                )
+            artifact_map = {"labels": "labels-csv", "ca": "ca", "s": "s", "z": "z"}
+            for item in selected:
+                key = artifact_map.get(item)
+                if key:
+                    path = _safe_artifact_path(result, key)
+                    archive.write(path, arcname=path.name)
+        try:
+            export_path.resolve().relative_to(root)
+        except ValueError as exc:
+            raise HTTPException(500, "导出文件路径异常") from exc
+    except Exception:
+        # 文件先写入、数据库后提交；生成或校验失败时不留下孤立档案。
+        export_path.unlink(missing_ok=True)
+        raise
     item = TaskExport(
         task_id=task_id,
         export_type="zip",
@@ -799,7 +822,13 @@ def create_task_export(
         file_size=export_path.stat().st_size,
     )
     session.add(item)
-    session.commit()
+    try:
+        session.commit()
+    except Exception:
+        session.rollback()
+        # 数据库记录未提交时删除已生成文件，保持两侧状态一致。
+        export_path.unlink(missing_ok=True)
+        raise
     session.refresh(item)
     return _export_response(item)
 
@@ -931,10 +960,12 @@ def retry_task(
     if task.status not in {"failed", "cancelled"}:
         raise HTTPException(422, "仅失败或取消的任务可重试")
     dataset = _get_user_dataset(session, task.dataset_id, user)
-    old_result = session.scalar(select(TaskResult).where(TaskResult.task_id == task.id))
-    if old_result is not None:
-        _remove_result_directory(old_result)
-        session.delete(old_result)
+    cleanup_paths = _task_cleanup_paths(session, task.id)
+    enqueue_cleanups(session, cleanup_paths)
+    for export in session.scalars(select(TaskExport).where(TaskExport.task_id == task.id)).all():
+        session.delete(export)
+    for result in session.scalars(select(TaskResult).where(TaskResult.task_id == task.id)).all():
+        session.delete(result)
     _queue_task(session, task, user, increment_retry=True)
     _add_log(
         session,
@@ -944,6 +975,7 @@ def retry_task(
         message="任务已重新执行",
     )
     session.commit()
+    process_pending_cleanup_jobs(limit=max(20, len(cleanup_paths)), bind=session.get_bind())
     session.refresh(task)
     task_execution_manager.notify()
     return _task_response(session, task, dataset.name)
@@ -995,19 +1027,26 @@ def delete_task(
     task = _get_user_task(session, task_id, user)
     if task.status not in DELETABLE_STATUSES:
         raise HTTPException(422, "运行中或排队中的任务不可删除，请先取消")
-    old_result = session.scalar(select(TaskResult).where(TaskResult.task_id == task.id))
-    _remove_result_directory(old_result)
+    cleanup_paths = _task_cleanup_paths(session, task.id)
+    enqueue_cleanups(session, cleanup_paths)
+    for export in session.scalars(select(TaskExport).where(TaskExport.task_id == task.id)).all():
+        session.delete(export)
+    for result in session.scalars(select(TaskResult).where(TaskResult.task_id == task.id)).all():
+        session.delete(result)
+    _detach_task_logs(session, task.id)
     session.delete(task)
     _add_log(
         session,
         user_id=user.id,
-        task_id=task_id,
+        task_id=None,
         action="task_deleted",
         level="warning",
         message=f"删除任务 #{task_id}",
+        detail={"taskId": task_id},
     )
     session.commit()
-    return MessageResponse(message="任务已删除")
+    process_pending_cleanup_jobs(limit=max(20, len(cleanup_paths)), bind=session.get_bind())
+    return MessageResponse(message="任务已删除，相关结果和导出文件已进入清理流程")
 
 
 @router.get("/{task_id}/logs", response_model=AnalysisTaskLogPageResponse)
@@ -1056,13 +1095,17 @@ def bulk_tasks(
     affected = 0
     notify_executor = False
     active_cancellations: list[int] = []
+    cleanup_paths: set[tuple[str, Path]] = set()
     for task in tasks:
         try:
             if action == "retry" and task.status in {"failed", "cancelled"}:
-                old_result = session.scalar(select(TaskResult).where(TaskResult.task_id == task.id))
-                if old_result is not None:
-                    _remove_result_directory(old_result)
-                    session.delete(old_result)
+                task_paths = _task_cleanup_paths(session, task.id)
+                cleanup_paths.update(task_paths)
+                enqueue_cleanups(session, task_paths)
+                for export in session.scalars(select(TaskExport).where(TaskExport.task_id == task.id)).all():
+                    session.delete(export)
+                for result in session.scalars(select(TaskResult).where(TaskResult.task_id == task.id)).all():
+                    session.delete(result)
                 _queue_task(session, task, user, increment_retry=True)
                 affected += 1
                 notify_executor = True
@@ -1074,8 +1117,14 @@ def bulk_tasks(
                 affected += 1
                 active_cancellations.append(task.id)
             elif action == "delete" and task.status in DELETABLE_STATUSES:
-                old_result = session.scalar(select(TaskResult).where(TaskResult.task_id == task.id))
-                _remove_result_directory(old_result)
+                task_paths = _task_cleanup_paths(session, task.id)
+                cleanup_paths.update(task_paths)
+                enqueue_cleanups(session, task_paths)
+                for export in session.scalars(select(TaskExport).where(TaskExport.task_id == task.id)).all():
+                    session.delete(export)
+                for result in session.scalars(select(TaskResult).where(TaskResult.task_id == task.id)).all():
+                    session.delete(result)
+                _detach_task_logs(session, task.id)
                 session.delete(task)
                 affected += 1
         except HTTPException:
@@ -1083,6 +1132,7 @@ def bulk_tasks(
             continue
 
     session.commit()
+    process_pending_cleanup_jobs(limit=max(20, len(cleanup_paths)), bind=session.get_bind())
     if notify_executor:
         task_execution_manager.notify()
     for task_id in active_cancellations:
