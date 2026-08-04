@@ -1,6 +1,7 @@
 import hashlib
 import io
 import json
+import logging
 import re
 import zipfile
 from datetime import datetime, timezone
@@ -17,7 +18,7 @@ from sqlalchemy.orm import Session
 from .auth import get_current_user
 from .config import get_settings
 from .database import get_session
-from .models import AnalysisTask, Dataset, DatasetQuality, DatasetRevision, User
+from .models import AnalysisTask, Dataset, DatasetQuality, DatasetRevision, OperationLog, User
 from .schemas import (
     DatasetBulkRequest,
     DatasetCatalogItemResponse,
@@ -30,6 +31,7 @@ from .schemas import (
 router = APIRouter(prefix="/api/datasets", tags=["datasets"])
 LABEL_VARIABLE_NAMES = ("y", "label", "labels")
 SAFE_FILENAME_PATTERN = re.compile(r"[^0-9A-Za-z._-]+")
+logger = logging.getLogger(__name__)
 
 
 def _variable_shape(value) -> list[int]:
@@ -199,6 +201,31 @@ def _parse_loaded_mat(filename: str, mat: dict) -> dict:
 
 def _parse_mat_content(filename: str, content: bytes) -> dict:
     return _parse_loaded_mat(filename, _load_mat_content(filename, content))
+
+
+def _persist_parse_log(
+    session: Session,
+    user: User,
+    *,
+    filename: str,
+    success: bool,
+    detail: dict,
+) -> None:
+    """解析接口单独提交审计日志，避免日志事务影响文件解析结果。"""
+    session.add(
+        OperationLog(
+            user_id=user.id,
+            action="dataset_parse" if success else "dataset_parse_failed",
+            level="info" if success else "error",
+            message=("数据集文件解析成功：" if success else "数据集文件解析失败：") + filename,
+            detail_json=json.dumps(detail, ensure_ascii=False),
+        ),
+    )
+    try:
+        session.commit()
+    except Exception:
+        session.rollback()
+        logger.exception("写入数据集解析操作日志失败")
 
 
 def _build_quality_summary(parsed: dict) -> tuple[str, list[str]]:
@@ -900,7 +927,10 @@ def delete_dataset(
 
 
 @router.get("/example-mat")
-def read_example_mat():
+def read_example_mat(user: User = Depends(get_current_user)):
+    if get_settings().app_env.strip().lower() == "production":
+        raise HTTPException(404, "示例数据接口仅在开发环境启用")
+
     mat_path = (
         Path(__file__).parent.parent.parent
         / "ec_python_converted"
@@ -925,7 +955,6 @@ def read_example_mat():
     e_shape = variables.get("E", {}).get("shape", [0, 0])
 
     return {
-        "path": str(mat_path),
         "variables": variables,
         "sampleCount": e_shape[0],
         "baseCount": e_shape[1],
@@ -934,9 +963,53 @@ def read_example_mat():
 
 
 @router.post("/parse")
-async def parse_dataset_file(file: UploadFile = File(...)):
-    if not file.filename:
-        raise HTTPException(400, "未选择文件")
+async def parse_dataset_file(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    source_filename = file.filename or ""
+    safe_filename = _safe_filename(source_filename) if source_filename else "unknown"
 
-    content = await file.read()
-    return _parse_mat_content(file.filename, content)
+    try:
+        if not source_filename:
+            raise HTTPException(400, "未选择文件")
+
+        content = await file.read()
+        parsed = _parse_mat_content(source_filename, content)
+    except HTTPException as exc:
+        session.rollback()
+        _persist_parse_log(
+            session,
+            user,
+            filename=safe_filename,
+            success=False,
+            detail={"statusCode": exc.status_code, "errorType": type(exc).__name__},
+        )
+        logger.error("数据集文件解析失败：%s（状态码：%s）", safe_filename, exc.status_code)
+        raise
+    except Exception as exc:
+        session.rollback()
+        _persist_parse_log(
+            session,
+            user,
+            filename=safe_filename,
+            success=False,
+            detail={"statusCode": 500, "errorType": type(exc).__name__},
+        )
+        logger.exception("数据集文件解析出现未预期异常：%s", safe_filename)
+        raise HTTPException(500, "数据集解析失败") from exc
+
+    _persist_parse_log(
+        session,
+        user,
+        filename=safe_filename,
+        success=True,
+        detail={
+            "sampleCount": parsed.get("sampleCount", 0),
+            "baseCount": parsed.get("baseCount", 0),
+            "classCount": parsed.get("classCount", 0),
+            "hasLabels": bool(parsed.get("hasLabels")),
+        },
+    )
+    return parsed

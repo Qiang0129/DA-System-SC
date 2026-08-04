@@ -10,6 +10,7 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 
 
 class Settings(BaseSettings):
+    app_env: str = Field("development", validation_alias="APP_ENV")
     db_host: str = Field("127.0.0.1", validation_alias="DB_HOST")
     db_port: int = Field(3306, validation_alias="DB_PORT")
     db_name: str = Field("soft_web", validation_alias="DB_NAME")

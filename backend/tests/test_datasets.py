@@ -1,4 +1,5 @@
 import io
+import logging
 import re
 from datetime import datetime
 from pathlib import Path
@@ -10,7 +11,7 @@ from sqlalchemy import func, select
 
 from app.config import get_settings
 from app.database import Base, get_session, make_engine, make_session_factory
-from app.models import AnalysisTask, Dataset, TaskResult, User
+from app.models import AnalysisTask, Dataset, OperationLog, TaskResult, User
 from main import app
 
 
@@ -62,7 +63,8 @@ def _upload_dataset(client: TestClient, headers: dict[str, str], filename: str, 
 
 
 def test_parse_mat_dataset_uses_uploaded_matrix_and_labels():
-    client = TestClient(app)
+    client, testing_session_local = _make_test_context()
+    headers = _register_and_headers(client)
     payload = _mat_file_payload(
         {
             "E": np.array(
@@ -79,6 +81,7 @@ def test_parse_mat_dataset_uses_uploaded_matrix_and_labels():
 
     response = client.post(
         "/api/datasets/parse",
+        headers=headers,
         files={"file": ("real_upload.mat", payload, "application/octet-stream")},
     )
 
@@ -99,13 +102,22 @@ def test_parse_mat_dataset_uses_uploaded_matrix_and_labels():
         {"name": "base_3", "clusterCount": 2, "range": "2 - 3"},
     ]
 
+    with testing_session_local() as session:
+        log = session.scalar(select(OperationLog).where(OperationLog.action == "dataset_parse"))
+        assert log is not None
+        assert log.user_id == 1
+        assert log.level == "info"
+        assert log.message == "数据集文件解析成功：real_upload.mat"
+
 
 def test_parse_mat_dataset_without_labels_returns_empty_label_summary():
-    client = TestClient(app)
+    client = _make_test_client()
+    headers = _register_and_headers(client)
     payload = _mat_file_payload({"E": np.array([[1, 2], [2, 3], [3, 3]])})
 
     response = client.post(
         "/api/datasets/parse",
+        headers=headers,
         files={"file": ("unlabeled_upload.mat", payload, "application/octet-stream")},
     )
 
@@ -114,6 +126,61 @@ def test_parse_mat_dataset_without_labels_returns_empty_label_summary():
     assert body["hasLabels"] is False
     assert body["classCount"] == 0
     assert body["labelDistribution"] == []
+
+
+def test_dataset_parse_and_example_mat_require_authentication():
+    client = _make_test_client()
+    payload = _mat_file_payload({"E": np.array([[1, 2], [2, 3]])})
+
+    assert client.get("/api/datasets/example-mat").status_code == 401
+    assert client.post(
+        "/api/datasets/parse",
+        files={"file": ("unauthenticated.mat", payload, "application/octet-stream")},
+    ).status_code == 401
+
+
+def test_example_mat_hides_storage_path_and_is_disabled_in_production(monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "app_env", "development")
+    client = _make_test_client()
+    headers = _register_and_headers(client)
+
+    response = client.get("/api/datasets/example-mat", headers=headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "path" not in body
+    assert str(Path(__file__).resolve().parents[2]) not in response.text
+    assert body["sampleCount"] > 0
+
+    monkeypatch.setattr(settings, "app_env", "production")
+    production_response = client.get("/api/datasets/example-mat", headers=headers)
+
+    assert production_response.status_code == 404
+    assert production_response.json()["detail"] == "示例数据接口仅在开发环境启用"
+
+
+def test_parse_failure_writes_error_log_and_python_exception(caplog):
+    client, testing_session_local = _make_test_context()
+    headers = _register_and_headers(client)
+
+    with caplog.at_level(logging.ERROR, logger="app.datasets"):
+        response = client.post(
+            "/api/datasets/parse",
+            headers=headers,
+            files={"file": ("invalid.txt", b"not a mat file", "text/plain")},
+        )
+
+    assert response.status_code == 400
+    assert response.json()["detail"].startswith("不支持的文件格式")
+    assert any("数据集文件解析失败：invalid.txt" in record.message for record in caplog.records)
+
+    with testing_session_local() as session:
+        log = session.scalar(select(OperationLog).where(OperationLog.action == "dataset_parse_failed"))
+        assert log is not None
+        assert log.user_id == 1
+        assert log.level == "error"
+        assert log.message == "数据集文件解析失败：invalid.txt"
 
 
 def test_upload_dataset_persists_file_and_list_returns_saved_record(tmp_path, monkeypatch):
