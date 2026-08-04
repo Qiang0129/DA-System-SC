@@ -95,7 +95,11 @@ def test_register_login_me_and_logout_flow():
     assert register_body["user"]["email"] == "alice@example.com"
     assert register_body["user"]["role"] == "user"
     assert register_body["access_token"]
-    assert register_body["refresh_token"]
+    assert "refresh_token" not in register_body
+    assert "soft_web_refresh=" in register_response.headers["set-cookie"]
+    assert "HttpOnly" in register_response.headers["set-cookie"]
+    assert "SameSite=lax" in register_response.headers["set-cookie"]
+    assert "Path=/api/auth" in register_response.headers["set-cookie"]
 
     duplicate_response = client.post(
         "/api/auth/register",
@@ -131,6 +135,9 @@ def test_register_login_me_and_logout_flow():
     )
     assert login_response.status_code == 200
     login_body = login_response.json()
+    login_refresh_token = client.cookies.get("soft_web_refresh")
+    assert login_refresh_token
+    assert "refresh_token" not in login_body
 
     me_response = client.get(
         "/api/auth/me",
@@ -141,22 +148,108 @@ def test_register_login_me_and_logout_flow():
 
     refresh_response = client.post(
         "/api/auth/refresh",
-        json={"refresh_token": login_body["refresh_token"]},
     )
     assert refresh_response.status_code == 200
     assert refresh_response.json()["access_token"]
+    rotated_refresh_token = client.cookies.get("soft_web_refresh")
+    assert rotated_refresh_token
+    assert rotated_refresh_token != login_refresh_token
 
-    logout_response = client.post(
-        "/api/auth/logout",
-        json={"refresh_token": login_body["refresh_token"]},
-    )
+    logout_response = client.post("/api/auth/logout")
     assert logout_response.status_code == 200
+    assert "Max-Age=0" in logout_response.headers["set-cookie"]
 
     revoked_refresh_response = client.post(
         "/api/auth/refresh",
-        json={"refresh_token": login_body["refresh_token"]},
+        headers={"Cookie": f"soft_web_refresh={rotated_refresh_token}"},
     )
     assert revoked_refresh_response.status_code == 401
+    assert "Max-Age=0" in revoked_refresh_response.headers["set-cookie"]
+
+
+def test_refresh_token_reuse_revokes_all_user_sessions():
+    client = make_test_client()
+
+    register_response = client.post(
+        "/api/auth/register",
+        json={
+            "username": "alice",
+            "password": "secret123",
+            "confirm_password": "secret123",
+        },
+    )
+    assert register_response.status_code == 200
+
+    first_login = client.post(
+        "/api/auth/login",
+        json={"username": "alice", "password": "secret123"},
+    )
+    assert first_login.status_code == 200
+    first_refresh_token = client.cookies.get("soft_web_refresh")
+    assert first_refresh_token
+
+    first_rotation = client.post("/api/auth/refresh")
+    assert first_rotation.status_code == 200
+
+    second_login = client.post(
+        "/api/auth/login",
+        json={"username": "alice", "password": "secret123"},
+    )
+    assert second_login.status_code == 200
+    second_refresh_token = client.cookies.get("soft_web_refresh")
+    assert second_refresh_token
+
+    client.cookies.clear()
+    client.cookies.set("soft_web_refresh", first_refresh_token)
+    reuse_response = client.post("/api/auth/refresh")
+    assert reuse_response.status_code == 401
+    assert "重复使用" in reuse_response.json()["detail"]
+    assert "Max-Age=0" in reuse_response.headers["set-cookie"]
+
+    client.cookies.clear()
+    client.cookies.set("soft_web_refresh", second_refresh_token)
+    all_sessions_response = client.post("/api/auth/refresh")
+    assert all_sessions_response.status_code == 401
+
+
+def test_refresh_cookie_is_secure_in_production(monkeypatch):
+    from app import auth
+
+    settings = auth.get_settings()
+    monkeypatch.setattr(settings, "app_env", "production")
+    client = make_test_client()
+
+    response = client.post(
+        "/api/auth/register",
+        json={
+            "username": "secure-user",
+            "password": "secret123",
+            "confirm_password": "secret123",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Secure" in response.headers["set-cookie"]
+
+
+def test_refresh_cookie_is_not_secure_in_development(monkeypatch):
+    from app import auth
+
+    settings = auth.get_settings()
+    monkeypatch.setattr(settings, "app_env", "development")
+    client = make_test_client()
+
+    response = client.post(
+        "/api/auth/register",
+        json={
+            "username": "dev-cookie-user",
+            "password": "secret123",
+            "confirm_password": "secret123",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Secure" not in response.headers["set-cookie"]
 
 
 def test_email_verification_register_flow_and_login_by_email(monkeypatch):

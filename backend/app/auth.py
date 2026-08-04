@@ -1,7 +1,8 @@
 from datetime import timedelta
+import logging
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
-from sqlalchemy import select
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response, status
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -21,7 +22,6 @@ from .schemas import (
     EmailCodeRequest,
     LoginRequest,
     MessageResponse,
-    RefreshRequest,
     RegisterRequest,
     TurnstilePassRequest,
     TurnstilePassResponse,
@@ -31,14 +31,18 @@ from .security import (
     create_access_token,
     create_refresh_token,
     create_turnstile_pass_token,
+    clear_refresh_cookie,
     hash_password,
     hash_token,
+    REFRESH_COOKIE_NAME,
+    set_refresh_cookie,
     utc_now,
     verify_password,
 )
 from .turnstile import verify_turnstile_access, verify_turnstile_token
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 
 def get_user_by_username(session: Session, username: str) -> User | None:
@@ -77,6 +81,25 @@ def create_user_session(session: Session, user: User) -> tuple[str, str]:
     session.add(user_session)
     access_token = create_access_token(user.id, user.username)
     return access_token, refresh_token
+
+
+def revoke_all_user_sessions(session: Session, user_id: int, revoked_at) -> None:
+    session.execute(
+        update(UserSession)
+        .where(UserSession.user_id == user_id, UserSession.revoked_at.is_(None))
+        .values(revoked_at=revoked_at),
+    )
+
+
+def _raise_refresh_error(message: str) -> None:
+    """通过异常响应明确清除浏览器中的刷新 Cookie。"""
+    cookie_response = Response()
+    clear_refresh_cookie(cookie_response)
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=message,
+        headers={"set-cookie": cookie_response.headers["set-cookie"]},
+    )
 
 
 def parse_bearer_token(authorization: str | None) -> str:
@@ -139,7 +162,7 @@ def get_current_user(
 
 
 @router.post("/register", response_model=AuthResponse)
-def register(payload: RegisterRequest, session: Session = Depends(get_session)):
+def register(payload: RegisterRequest, response: Response, session: Session = Depends(get_session)):
     settings = get_settings()
     email: str | None = None
     email_code_record = None
@@ -175,16 +198,16 @@ def register(payload: RegisterRequest, session: Session = Depends(get_session)):
     access_token, refresh_token = create_user_session(session, user)
     session.commit()
     session.refresh(user)
+    set_refresh_cookie(response, refresh_token)
 
     return AuthResponse(
         user=UserResponse.model_validate(user),
         access_token=access_token,
-        refresh_token=refresh_token,
     )
 
 
 @router.post("/login", response_model=AuthResponse)
-def login(payload: LoginRequest, session: Session = Depends(get_session)):
+def login(payload: LoginRequest, response: Response, session: Session = Depends(get_session)):
     verify_turnstile_access(payload.turnstile_token, payload.turnstile_pass_token, "login")
 
     user = get_active_user_or_401(session, payload.username, payload.password)
@@ -192,11 +215,11 @@ def login(payload: LoginRequest, session: Session = Depends(get_session)):
     access_token, refresh_token = create_user_session(session, user)
     session.commit()
     session.refresh(user)
+    set_refresh_cookie(response, refresh_token)
 
     return AuthResponse(
         user=UserResponse.model_validate(user),
         access_token=access_token,
-        refresh_token=refresh_token,
     )
 
 
@@ -206,27 +229,58 @@ def me(user: User = Depends(get_current_user)):
 
 
 @router.post("/refresh", response_model=AccessTokenResponse)
-def refresh(payload: RefreshRequest, session: Session = Depends(get_session)):
-    token_hash = hash_token(payload.refresh_token)
-    user_session = session.scalar(
-        select(UserSession).where(UserSession.refresh_token_hash == token_hash),
-    )
-    if (
-        not user_session
-        or user_session.revoked_at is not None
-        or user_session.expires_at <= utc_now()
-        or user_session.user.status != "active"
-    ):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="刷新凭证无效或已过期")
+def refresh(
+    response: Response,
+    refresh_token: str | None = Cookie(default=None, alias=REFRESH_COOKIE_NAME),
+    session: Session = Depends(get_session),
+):
+    if not refresh_token:
+        _raise_refresh_error("缺少刷新凭证")
 
+    token_hash = hash_token(refresh_token)
+    now = utc_now()
+    user_session = session.scalar(
+        select(UserSession)
+        .where(UserSession.refresh_token_hash == token_hash)
+        .with_for_update(),
+    )
+    if not user_session:
+        _raise_refresh_error("刷新凭证无效或已过期")
+
+    if user_session.revoked_at is not None:
+        revoke_all_user_sessions(session, user_session.user_id, now)
+        session.commit()
+        logger.warning(
+            "refresh token reuse detected",
+            extra={"user_id": user_session.user_id, "session_id": user_session.id},
+        )
+        _raise_refresh_error("检测到刷新凭证重复使用，请重新登录")
+
+    if user_session.expires_at <= now or user_session.user.status != "active":
+        user_session.revoked_at = now
+        session.commit()
+        _raise_refresh_error("刷新凭证无效或已过期")
+
+    user_session.revoked_at = now
+    access_token, next_refresh_token = create_user_session(session, user_session.user)
+    session.commit()
+    set_refresh_cookie(response, next_refresh_token)
     return AccessTokenResponse(
-        access_token=create_access_token(user_session.user.id, user_session.user.username),
+        access_token=access_token,
     )
 
 
 @router.post("/logout", response_model=MessageResponse)
-def logout(payload: RefreshRequest, session: Session = Depends(get_session)):
-    token_hash = hash_token(payload.refresh_token)
+def logout(
+    response: Response,
+    refresh_token: str | None = Cookie(default=None, alias=REFRESH_COOKIE_NAME),
+    session: Session = Depends(get_session),
+):
+    if not refresh_token:
+        clear_refresh_cookie(response)
+        return MessageResponse(message="已退出登录")
+
+    token_hash = hash_token(refresh_token)
     user_session = session.scalar(
         select(UserSession).where(UserSession.refresh_token_hash == token_hash),
     )
@@ -234,4 +288,5 @@ def logout(payload: RefreshRequest, session: Session = Depends(get_session)):
         user_session.revoked_at = utc_now()
         session.commit()
 
+    clear_refresh_cookie(response)
     return MessageResponse(message="已退出登录")

@@ -2,13 +2,13 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
+import { setAccessToken } from './api/auth';
 import type { MatrixPreview, TaskResultEnvelope } from './workbench/results/types';
 
 const originalFetch = globalThis.fetch;
 
 const authBody = {
   access_token: 'access-token',
-  refresh_token: 'refresh-token',
   token_type: 'bearer',
   user: { id: 1, username: 'alice', role: 'user', status: 'active' },
 };
@@ -360,6 +360,7 @@ describe('dashboard homepage', () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;
     localStorage.clear();
+    setAccessToken(null);
     window.history.pushState({}, '', '/');
     vi.restoreAllMocks();
   });
@@ -376,7 +377,8 @@ describe('dashboard homepage', () => {
   });
 
   it('restores a valid session and enters the default workbench', async () => {
-    localStorage.setItem('soft_web_access_token', 'access-token');
+    setAccessToken('access-token');
+    localStorage.setItem('soft_web_user', JSON.stringify(authBody.user));
     mockAuthApi();
     renderApp('/');
 
@@ -385,8 +387,7 @@ describe('dashboard homepage', () => {
   });
 
   it('clears an expired session and routes the workbench entry to login', async () => {
-    localStorage.setItem('soft_web_access_token', 'expired-token');
-    localStorage.setItem('soft_web_refresh_token', 'expired-refresh-token');
+    setAccessToken('expired-token');
     localStorage.setItem('soft_web_user', JSON.stringify(authBody.user));
     globalThis.fetch = vi.fn(async (input) => {
       const url = String(input);
@@ -403,6 +404,15 @@ describe('dashboard homepage', () => {
     expect(localStorage.getItem('soft_web_access_token')).toBeNull();
     expect(localStorage.getItem('soft_web_refresh_token')).toBeNull();
     expect(localStorage.getItem('soft_web_user')).toBeNull();
+  });
+
+  it('redirects a direct workbench visit to login when the refresh cookie is invalid', async () => {
+    globalThis.fetch = vi.fn(async () => createResponse({ detail: '刷新凭证无效或已过期' }, false)) as typeof fetch;
+
+    renderApp('/workbench/analysis');
+
+    expect(await screen.findByRole('heading', { name: '登录', level: 1 })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/login');
   });
 
   it('renders the dashboard shell after logging in', async () => {
@@ -442,7 +452,7 @@ describe('dashboard homepage', () => {
   });
 
   it('switches convergence runs and keeps the selected task when opening a detail page', async () => {
-    localStorage.setItem('soft_web_access_token', 'access-token');
+    setAccessToken('access-token');
     mockAuthApi();
     const user = userEvent.setup();
     renderApp('/workbench/analysis');
@@ -467,7 +477,7 @@ describe('dashboard homepage', () => {
   });
 
   it('renders complete result detail pages from the selected task', async () => {
-    localStorage.setItem('soft_web_access_token', 'access-token');
+    setAccessToken('access-token');
     mockAuthApi();
     const routes = [
       ['/workbench/ca-matrix?taskId=3', 'CA 协关联矩阵', '矩阵诊断'],
@@ -524,7 +534,7 @@ describe('dashboard homepage', () => {
   });
 
   it('renders the performance review workspace and synchronizes the focused metric', async () => {
-    localStorage.setItem('soft_web_access_token', 'access-token');
+    setAccessToken('access-token');
     mockAuthApi();
     const user = userEvent.setup();
     renderApp('/workbench/evaluation?taskId=3');
@@ -559,7 +569,7 @@ describe('dashboard homepage', () => {
   });
 
   it('keeps the evaluation context visible when repeated runs are unavailable', async () => {
-    localStorage.setItem('soft_web_access_token', 'access-token');
+    setAccessToken('access-token');
     mockAuthApi(createTaskResultEnvelope({ emptyDetails: true }));
     renderApp('/workbench/evaluation?taskId=3');
 
@@ -570,7 +580,7 @@ describe('dashboard homepage', () => {
   });
 
   it('keeps the matrix color scale outside the chart with real bounds', async () => {
-    localStorage.setItem('soft_web_access_token', 'access-token');
+    setAccessToken('access-token');
     mockAuthApi();
     renderApp('/workbench/ca-matrix?taskId=3');
 
@@ -579,7 +589,7 @@ describe('dashboard homepage', () => {
   });
 
   it('changes the visible CA ranking count without altering the persisted order', async () => {
-    localStorage.setItem('soft_web_access_token', 'access-token');
+    setAccessToken('access-token');
     mockAuthApi();
     const user = userEvent.setup();
     renderApp('/workbench/ca-matrix?taskId=3');
@@ -599,7 +609,7 @@ describe('dashboard homepage', () => {
   });
 
   it('updates the kernel definition and weight workspace when selecting a kernel', async () => {
-    localStorage.setItem('soft_web_access_token', 'access-token');
+    setAccessToken('access-token');
     mockAuthApi();
     const user = userEvent.setup();
     renderApp('/workbench/kernel-config?taskId=3');
@@ -621,7 +631,7 @@ describe('dashboard homepage', () => {
   });
 
   it('synchronizes the MKL chart diagnostics and iteration table by run', async () => {
-    localStorage.setItem('soft_web_access_token', 'access-token');
+    setAccessToken('access-token');
     mockAuthApi();
     const user = userEvent.setup();
     renderApp('/workbench/mkl?taskId=3');
@@ -645,7 +655,7 @@ describe('dashboard homepage', () => {
   });
 
   it('switches result visualizations and keeps the task context on the professional page', async () => {
-    localStorage.setItem('soft_web_access_token', 'access-token');
+    setAccessToken('access-token');
     mockAuthApi();
     const user = userEvent.setup();
     renderApp('/workbench/visualization?taskId=3');
@@ -667,7 +677,7 @@ describe('dashboard homepage', () => {
   });
 
   it('updates the report preview when chapters and format change', async () => {
-    localStorage.setItem('soft_web_access_token', 'access-token');
+    setAccessToken('access-token');
     mockAuthApi();
     const user = userEvent.setup();
     renderApp('/workbench/reports?taskId=3');
@@ -692,7 +702,7 @@ describe('dashboard homepage', () => {
   });
 
   it('shows explicit overview empty states when optional result details are absent', async () => {
-    localStorage.setItem('soft_web_access_token', 'access-token');
+    setAccessToken('access-token');
     mockAuthApi(createTaskResultEnvelope({ emptyDetails: true }));
     renderApp('/workbench/analysis');
 
@@ -708,7 +718,7 @@ describe('dashboard homepage', () => {
 
   it('renders the redesigned dataset detail page and random selection control', async () => {
     const dataset = createDataset();
-    localStorage.setItem('soft_web_access_token', 'access-token');
+    setAccessToken('access-token');
     mockDatasetApi({ datasets: [dataset] });
 
     const user = userEvent.setup();
@@ -800,7 +810,7 @@ describe('dashboard homepage', () => {
 
   it('renders datasets returned by the paginated catalog response', async () => {
     const dataset = createDataset({ name: 'paged_upload' });
-    localStorage.setItem('soft_web_access_token', 'access-token');
+    setAccessToken('access-token');
     mockDatasetApi({
       datasets: {
         items: [dataset],
@@ -818,7 +828,7 @@ describe('dashboard homepage', () => {
 
   it('uses compact icon actions in the dataset card view', async () => {
     const dataset = createDataset();
-    localStorage.setItem('soft_web_access_token', 'access-token');
+    setAccessToken('access-token');
     mockDatasetApi({ datasets: [dataset] });
 
     const user = userEvent.setup();
@@ -845,7 +855,7 @@ describe('dashboard homepage', () => {
       matrixShape: 'E: 48 x 24',
       labelShape: 'y: 48',
     });
-    localStorage.setItem('soft_web_access_token', 'access-token');
+    setAccessToken('access-token');
     const fetchMock = mockDatasetApi({ datasets: [dataset], appendResponse: appendedDataset });
 
     const user = userEvent.setup();
@@ -867,18 +877,19 @@ describe('dashboard homepage', () => {
       new File(['append payload'], 'new_samples.mat', { type: 'application/octet-stream' }),
     );
 
-    await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringMatching(/\/api\/datasets\/8\/append$/),
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            Authorization: 'Bearer access-token',
-          }),
-          body: expect.any(FormData),
-        }),
-      ),
-    );
+    await waitFor(() => {
+      const appendCall = fetchMock.mock.calls.find(([input]) =>
+        String(input).endsWith('/api/datasets/8/append'),
+      );
+      expect(appendCall).toBeDefined();
+      const options = appendCall?.[1] as RequestInit | undefined;
+      expect(options).toEqual(expect.objectContaining({
+        method: 'POST',
+        body: expect.any(FormData),
+      }));
+      expect(options?.headers).toBeInstanceOf(Headers);
+      expect((options?.headers as Headers).get('Authorization')).toBe('Bearer access-token');
+    });
     expect(await screen.findByText('48 / 24 / 3')).toBeInTheDocument();
   });
 
@@ -887,7 +898,7 @@ describe('dashboard homepage', () => {
       qualityStatus: 'warning',
       qualityIssues: ['标签数量与样本数量不一致'],
     });
-    localStorage.setItem('soft_web_access_token', 'access-token');
+    setAccessToken('access-token');
     mockDatasetApi({ datasets: [dataset] });
 
     renderApp('/workbench/datasets');
@@ -913,7 +924,7 @@ describe('dashboard homepage', () => {
       taskCount: 3,
       lastAnalysisAt: '2026-08-04 10:20:30',
     });
-    localStorage.setItem('soft_web_access_token', 'access-token');
+    setAccessToken('access-token');
     mockDatasetApi({ datasets: [pendingDataset, completedDataset] });
 
     renderApp('/workbench/datasets');
@@ -928,7 +939,7 @@ describe('dashboard homepage', () => {
   it('opens the custom rename dialog and persists the new name', async () => {
     const dataset = createDataset();
     const renamedDataset = createDataset({ name: 'renamed_upload' });
-    localStorage.setItem('soft_web_access_token', 'access-token');
+    setAccessToken('access-token');
     const fetchMock = mockDatasetApi({
       datasets: [dataset],
       patchResponse: renamedDataset,
@@ -959,21 +970,22 @@ describe('dashboard homepage', () => {
 
     expect(await screen.findByText('renamed_upload')).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: '重命名数据集' })).not.toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringMatching(/\/api\/datasets\/8$/),
-      expect.objectContaining({
-        method: 'PATCH',
-        headers: expect.objectContaining({
-          Authorization: 'Bearer access-token',
-        }),
-        body: JSON.stringify({ name: 'renamed_upload' }),
-      }),
+    const renameCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).endsWith('/api/datasets/8'),
     );
+    expect(renameCall).toBeDefined();
+    const renameOptions = renameCall?.[1] as RequestInit | undefined;
+    expect(renameOptions).toEqual(expect.objectContaining({
+      method: 'PATCH',
+      body: JSON.stringify({ name: 'renamed_upload' }),
+    }));
+    expect(renameOptions?.headers).toBeInstanceOf(Headers);
+    expect((renameOptions?.headers as Headers).get('Authorization')).toBe('Bearer access-token');
   });
 
   it('confirms dataset deletion in an in-app dialog before issuing DELETE', async () => {
     const dataset = createDataset();
-    localStorage.setItem('soft_web_access_token', 'access-token');
+    setAccessToken('access-token');
     const fetchMock = mockDatasetApi({ datasets: [dataset] });
     const confirmSpy = vi.spyOn(window, 'confirm');
     const user = userEvent.setup();
@@ -1004,19 +1016,20 @@ describe('dashboard homepage', () => {
     await user.click(within(confirmDialog).getByRole('button', { name: '确认删除' }));
 
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '删除数据集' })).not.toBeInTheDocument());
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringMatching(/\/api\/datasets\/8$/),
-      expect.objectContaining({
-        method: 'DELETE',
-        headers: expect.objectContaining({ Authorization: 'Bearer access-token' }),
-      }),
+    const deleteCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).endsWith('/api/datasets/8'),
     );
+    expect(deleteCall).toBeDefined();
+    const deleteOptions = deleteCall?.[1] as RequestInit | undefined;
+    expect(deleteOptions).toEqual(expect.objectContaining({ method: 'DELETE' }));
+    expect(deleteOptions?.headers).toBeInstanceOf(Headers);
+    expect((deleteOptions?.headers as Headers).get('Authorization')).toBe('Bearer access-token');
     expect(screen.queryByText(dataset.name)).not.toBeInTheDocument();
   });
 
   it('keeps the delete dialog open when the deletion request fails', async () => {
     const dataset = createDataset();
-    localStorage.setItem('soft_web_access_token', 'access-token');
+    setAccessToken('access-token');
     mockDatasetApi({ datasets: [dataset], deleteOk: false, deleteDetail: '数据集正在被任务使用' });
     const user = userEvent.setup();
     renderApp('/workbench/datasets');
@@ -1036,7 +1049,7 @@ describe('dashboard homepage', () => {
   });
 
   it('renders the expanded soft copyright workbench routes', async () => {
-    localStorage.setItem('soft_web_access_token', 'access-token');
+    setAccessToken('access-token');
     mockAuthApi();
     const routes = [
       ['/workbench/data-quality', '数据质量检查'],

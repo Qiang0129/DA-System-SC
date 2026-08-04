@@ -17,11 +17,9 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { getStoredAccessToken } from './api/auth';
-import { API_BASE_URL } from './api/config';
+import { authorizedFetch } from './api/auth';
 import { SelectField } from './components/SelectField';
 
-const API = API_BASE_URL;
 const DATASET_RENDER_LIMIT = 60;
 const DATASET_TYPE_OPTIONS = [
   { value: '全部', label: '全部' },
@@ -406,14 +404,6 @@ function normalizeDataset(raw: RawDatasetCatalogItem): DatasetCatalogItem {
     labelDistribution: Array.isArray(raw.labelDistribution) ? raw.labelDistribution : [],
     clusterStats: Array.isArray(raw.clusterStats) ? raw.clusterStats : [],
   };
-}
-
-function getAuthHeaders() {
-  const token = getStoredAccessToken();
-  if (!token) {
-    throw new Error('请先登录后操作数据集');
-  }
-  return { Authorization: `Bearer ${token}` };
 }
 
 function normalizeTypeFilter(value: string | null): '全部' | '数值' | '混合' {
@@ -1110,19 +1100,9 @@ export function DatasetManagementPage() {
     let cancelled = false;
 
     async function loadDatasets() {
-      const token = getStoredAccessToken();
-      if (!token) {
-        setLoadingDatasets(false);
-        return;
-      }
-
       try {
         setLoadError(null);
-        const res = await fetch(`${API}/datasets`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        const res = await authorizedFetch('/datasets', {}, '请先登录后操作数据集');
 
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
@@ -1177,11 +1157,10 @@ export function DatasetManagementPage() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const res = await fetch(appendTargetId ? `${API}/datasets/${appendTargetId}/append` : `${API}/datasets`, {
+      const res = await authorizedFetch(appendTargetId ? `/datasets/${appendTargetId}/append` : '/datasets', {
         method: 'POST',
-        headers: getAuthHeaders(),
         body: formData,
-      });
+      }, '请先登录后操作数据集');
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -1227,14 +1206,13 @@ export function DatasetManagementPage() {
   }
 
   async function submitRename(dataset: DatasetCatalogItem, nextName: string) {
-    const res = await fetch(`${API}/datasets/${dataset.id}`, {
+    const res = await authorizedFetch(`/datasets/${dataset.id}`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        ...getAuthHeaders(),
       },
       body: JSON.stringify({ name: nextName }),
-    });
+    }, '请先登录后操作数据集');
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -1247,10 +1225,9 @@ export function DatasetManagementPage() {
   }
 
   async function submitDelete(dataset: DatasetCatalogItem) {
-    const res = await fetch(`${API}/datasets/${dataset.id}`, {
+    const res = await authorizedFetch(`/datasets/${dataset.id}`, {
       method: 'DELETE',
-      headers: getAuthHeaders(),
-    });
+    }, '请先登录后操作数据集');
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));

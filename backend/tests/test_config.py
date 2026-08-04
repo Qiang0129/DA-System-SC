@@ -56,7 +56,8 @@ def test_startup_configuration_rejects_invalid_constructed_settings():
 def test_production_import_fails_without_jwt_secret():
     environment = os.environ.copy()
     environment["APP_ENV"] = "production"
-    environment.pop("JWT_SECRET_KEY", None)
+    # 本地 database.env 可能存在开发密钥，显式传空值才能验证生产环境的缺失配置。
+    environment["JWT_SECRET_KEY"] = ""
 
     result = subprocess.run(
         [sys.executable, "-c", "import main"],

@@ -12,7 +12,6 @@ export type AuthUser = {
 export type AuthResponse = {
   user: AuthUser;
   access_token: string;
-  refresh_token: string;
   token_type: string;
 };
 
@@ -25,48 +24,152 @@ export type TurnstilePassResponse = {
 };
 
 export const AUTH_STORAGE_KEYS = {
-  accessToken: 'soft_web_access_token',
-  refreshToken: 'soft_web_refresh_token',
   user: 'soft_web_user',
 } as const;
+
+const LEGACY_ACCESS_TOKEN_KEY = 'soft_web_access_token';
+const LEGACY_REFRESH_TOKEN_KEY = 'soft_web_refresh_token';
+
+let accessToken: string | null = null;
+let refreshPromise: Promise<string | null> | null = null;
+
+function errorMessage(body: unknown, fallback = '请求失败') {
+  if (body && typeof body === 'object' && 'detail' in body) {
+    const detail = (body as { detail?: unknown }).detail;
+    if (typeof detail === 'string') return detail;
+    if (detail && typeof detail === 'object' && 'message' in detail) {
+      return String((detail as { message?: unknown }).message || fallback);
+    }
+  }
+  return fallback;
+}
+
+function buildHeaders(options: RequestInit, token?: string) {
+  const headers = new Headers(options.headers);
+  if (!headers.has('Content-Type') && options.body && !(options.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  return headers;
+}
 
 async function requestJson<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
+    credentials: 'include',
+    headers: buildHeaders(options),
   });
-
   const body = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    const detail = typeof body.detail === 'string' ? body.detail : '请求失败';
-    throw new Error(detail);
+    throw new Error(errorMessage(body));
   }
 
   return body as T;
 }
 
+async function fetchWithToken(path: string, options: RequestInit, token: string) {
+  return fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    credentials: 'include',
+    headers: buildHeaders(options, token),
+  });
+}
+
+export function getAccessToken() {
+  return accessToken;
+}
+
+export function setAccessToken(token: string | null) {
+  accessToken = token;
+}
+
 export function saveAuthSession(auth: AuthResponse) {
-  localStorage.setItem(AUTH_STORAGE_KEYS.accessToken, auth.access_token);
-  localStorage.setItem(AUTH_STORAGE_KEYS.refreshToken, auth.refresh_token);
+  accessToken = auth.access_token;
   localStorage.setItem(AUTH_STORAGE_KEYS.user, JSON.stringify(auth.user));
+  localStorage.removeItem(LEGACY_ACCESS_TOKEN_KEY);
+  localStorage.removeItem(LEGACY_REFRESH_TOKEN_KEY);
 }
 
 export function clearAuthSession() {
-  localStorage.removeItem(AUTH_STORAGE_KEYS.accessToken);
-  localStorage.removeItem(AUTH_STORAGE_KEYS.refreshToken);
+  accessToken = null;
   localStorage.removeItem(AUTH_STORAGE_KEYS.user);
+  localStorage.removeItem(LEGACY_ACCESS_TOKEN_KEY);
+  localStorage.removeItem(LEGACY_REFRESH_TOKEN_KEY);
 }
 
-export function getStoredAccessToken() {
-  return localStorage.getItem(AUTH_STORAGE_KEYS.accessToken);
+export async function refreshAccessToken(): Promise<string | null> {
+  if (refreshPromise) {
+    return refreshPromise;
+  }
+
+  refreshPromise = (async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || typeof body.access_token !== 'string' || !body.access_token) {
+        clearAuthSession();
+        return null;
+      }
+      accessToken = body.access_token;
+      return accessToken;
+    } catch {
+      clearAuthSession();
+      return null;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
 }
 
-export function getStoredRefreshToken() {
-  return localStorage.getItem(AUTH_STORAGE_KEYS.refreshToken);
+export async function authorizedFetch(
+  path: string,
+  options: RequestInit = {},
+  unauthenticatedMessage = '请先登录后再操作',
+) {
+  const token = accessToken || await refreshAccessToken();
+  if (!token) {
+    throw new Error(unauthenticatedMessage);
+  }
+
+  const response = await fetchWithToken(path, options, token);
+  if (response.status !== 401) {
+    return response;
+  }
+
+  const refreshedToken = await refreshAccessToken();
+  if (!refreshedToken) {
+    clearAuthSession();
+    throw new Error('登录已过期，请重新登录');
+  }
+
+  return fetchWithToken(path, options, refreshedToken);
+}
+
+export async function authorizedJson<T>(
+  path: string,
+  options: RequestInit = {},
+  unauthenticatedMessage = '请先登录后再操作',
+): Promise<T> {
+  const response = await authorizedFetch(path, options, unauthenticatedMessage);
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(errorMessage(body));
+  }
+  return body as T;
+}
+
+export async function restoreAuthSession(): Promise<AuthUser | null> {
+  const user = await authorizedJson<AuthUser>('/auth/me', {}, '请先登录后再进入工作台');
+  localStorage.setItem(AUTH_STORAGE_KEYS.user, JSON.stringify(user));
+  return user;
 }
 
 function buildTurnstilePayload(
@@ -143,26 +246,14 @@ export function register(
   });
 }
 
-export function getCurrentUser(accessToken: string) {
-  return requestJson<AuthUser>('/auth/me', {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
+export function getCurrentUser() {
+  return authorizedJson<AuthUser>('/auth/me', {}, '请先登录后再获取用户信息');
 }
 
 export async function logout() {
-  const refreshToken = getStoredRefreshToken();
-  if (!refreshToken) {
-    clearAuthSession();
-    return;
-  }
-
   try {
     await requestJson<{ message: string }>('/auth/logout', {
       method: 'POST',
-      body: JSON.stringify({ refresh_token: refreshToken }),
     });
   } finally {
     clearAuthSession();

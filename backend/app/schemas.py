@@ -45,10 +45,6 @@ class TurnstilePassResponse(BaseModel):
     expires_in_seconds: int
 
 
-class RefreshRequest(BaseModel):
-    refresh_token: str = Field(min_length=16)
-
-
 class UserResponse(BaseModel):
     id: int
     username: str
@@ -63,7 +59,6 @@ class UserResponse(BaseModel):
 class AuthResponse(BaseModel):
     user: UserResponse
     access_token: str
-    refresh_token: str
     token_type: str = "bearer"
 
 

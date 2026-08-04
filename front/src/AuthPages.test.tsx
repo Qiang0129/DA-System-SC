@@ -72,7 +72,6 @@ function turnstilePassResponse(token = 'turnstile-pass-token') {
 function authSuccessResponse(username = 'alice') {
   return jsonResponse({
     access_token: 'access-token',
-    refresh_token: 'refresh-token',
     user: { id: 1, username, role: 'user', status: 'active' },
   });
 }
@@ -106,7 +105,7 @@ describe('AuthPages', () => {
     }
   });
 
-  it('logs in through the auth API and stores tokens', async () => {
+  it('logs in through the auth API without persisting tokens', async () => {
     const { LoginPage } = await loadAuthPages();
     const user = userEvent.setup();
     const onSuccess = vi.fn();
@@ -132,15 +131,16 @@ describe('AuthPages', () => {
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringMatching(/\/api\/auth\/login$/),
+      '/api/auth/login',
       expect.objectContaining({
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ username: 'alice@example.com', password: 'secret123', turnstile_token: null }),
       }),
     );
-    expect(localStorage.getItem('soft_web_access_token')).toBe('access-token');
-    expect(localStorage.getItem('soft_web_refresh_token')).toBe('refresh-token');
+    expect(localStorage.getItem('soft_web_access_token')).toBeNull();
+    expect(localStorage.getItem('soft_web_refresh_token')).toBeNull();
+    expect(localStorage.getItem('soft_web_user')).toContain('alice');
   });
 
   it('shows submitting feedback while registering', async () => {

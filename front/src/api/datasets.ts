@@ -1,5 +1,4 @@
-import { getStoredAccessToken } from './auth';
-import { API_BASE_URL } from './config';
+import { authorizedJson } from './auth';
 
 export type DatasetQualityStatus = 'ready' | 'warning' | 'error';
 
@@ -46,27 +45,7 @@ export type DatasetRevision = {
 };
 
 async function requestJson<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getStoredAccessToken();
-  if (!token) {
-    throw new Error('请先登录后再查看数据集信息');
-  }
-
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-      ...(options.headers || {}),
-    },
-  });
-
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const detail = typeof body.detail === 'string' ? body.detail : '请求失败';
-    throw new Error(detail);
-  }
-
-  return body as T;
+  return authorizedJson<T>(path, options, '请先登录后再查看数据集信息');
 }
 
 export async function fetchDatasetCatalog(pageSize = 100): Promise<DatasetCatalogPage> {

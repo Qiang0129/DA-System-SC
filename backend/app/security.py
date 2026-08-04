@@ -3,9 +3,15 @@ import hashlib
 import secrets
 
 import bcrypt
+from fastapi import Response
 from jose import JWTError, jwt
 
 from .config import get_settings
+
+
+REFRESH_COOKIE_NAME = "soft_web_refresh"
+REFRESH_COOKIE_PATH = "/api/auth"
+REFRESH_COOKIE_SAMESITE = "lax"
 
 
 def utc_now() -> datetime:
@@ -29,6 +35,28 @@ def hash_token(token: str) -> str:
 
 def create_refresh_token() -> str:
     return secrets.token_urlsafe(48)
+
+
+def set_refresh_cookie(response: Response, refresh_token: str) -> None:
+    settings = get_settings()
+    environment = settings.app_env.strip().lower()
+    response.set_cookie(
+        key=REFRESH_COOKIE_NAME,
+        value=refresh_token,
+        max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
+        httponly=True,
+        secure=environment not in {"development", "test"},
+        samesite=REFRESH_COOKIE_SAMESITE,
+        path=REFRESH_COOKIE_PATH,
+    )
+
+
+def clear_refresh_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key=REFRESH_COOKIE_NAME,
+        path=REFRESH_COOKIE_PATH,
+        samesite=REFRESH_COOKIE_SAMESITE,
+    )
 
 
 def create_access_token(user_id: int, username: str) -> str:

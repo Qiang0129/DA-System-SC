@@ -1,5 +1,4 @@
-import { getStoredAccessToken } from './auth';
-import { API_BASE_URL } from './config';
+import { authorizedFetch, authorizedJson } from './auth';
 import type {
   AnalysisTask,
   AnalysisTaskLog,
@@ -11,26 +10,7 @@ import type {
 } from '../workbench/tasks/types';
 
 async function requestJson<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getStoredAccessToken();
-  if (!token) {
-    throw new Error('请先登录后再操作任务中心');
-  }
-
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...(options.headers || {}),
-    },
-  });
-
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const detail = typeof body.detail === 'string' ? body.detail : '请求失败';
-    throw new Error(detail);
-  }
-  return body as T;
+  return authorizedJson<T>(path, options, '请先登录后再操作任务中心');
 }
 
 function toQuery(params: Record<string, string | number | undefined | null>) {
@@ -134,11 +114,11 @@ export function deleteTaskTemplate(templateId: number) {
 }
 
 export async function fetchDatasetOptions() {
-  const token = getStoredAccessToken();
-  if (!token) throw new Error('请先登录后再操作任务中心');
-  const response = await fetch(`${API_BASE_URL}/datasets?page=1&pageSize=100`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const response = await authorizedFetch(
+    '/datasets?page=1&pageSize=100',
+    {},
+    '请先登录后再操作任务中心',
+  );
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(typeof body.detail === 'string' ? body.detail : '加载数据集失败');

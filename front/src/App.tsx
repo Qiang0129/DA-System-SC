@@ -21,9 +21,8 @@ import { TaskResultViews } from './workbench/results/TaskResultViews';
 import { useTaskResult } from './workbench/results/useTaskResult';
 import {
   clearAuthSession,
-  getCurrentUser,
-  getStoredAccessToken,
   logout as logoutFromApi,
+  restoreAuthSession,
   type AuthUser,
 } from './api/auth';
 import { API_BASE_URL } from './api/config';
@@ -291,17 +290,9 @@ function App() {
     if (workbenchEntryPending) return;
 
     setWorkbenchEntryPending(true);
-    const accessToken = getStoredAccessToken();
 
     try {
-      if (!accessToken) {
-        clearAuthSession();
-        setCurrentUser(null);
-        navigate('/login');
-        return;
-      }
-
-      const user = await getCurrentUser(accessToken);
+      const user = await restoreAuthSession();
       setCurrentUser(user);
       openWorkbench();
     } catch {
@@ -338,14 +329,15 @@ function App() {
 
     sessionCheckedRef.current = true;
 
-    const accessToken = getStoredAccessToken();
-    if (!accessToken) {
+    const hasCachedUser = Boolean(localStorage.getItem('soft_web_user'));
+    const isWorkbenchPath = initialPathRef.current.startsWith('/workbench');
+    if (!hasCachedUser && !isWorkbenchPath) {
       return;
     }
 
     let cancelled = false;
 
-    getCurrentUser(accessToken)
+    restoreAuthSession()
       .then((user) => {
         if (cancelled) return;
         setCurrentUser(user);
@@ -357,6 +349,9 @@ function App() {
         if (cancelled) return;
         clearAuthSession();
         setCurrentUser(null);
+        if (isWorkbenchPath) {
+          navigate('/login', { replace: true });
+        }
       });
 
     return () => {

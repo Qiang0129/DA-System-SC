@@ -1,5 +1,4 @@
-import { getStoredAccessToken } from './auth';
-import { API_BASE_URL } from './config';
+import { authorizedFetch, authorizedJson } from './auth';
 import type { TaskExport, TaskResultEnvelope } from '../workbench/results/types';
 
 function errorMessage(body: unknown) {
@@ -13,16 +12,8 @@ function errorMessage(body: unknown) {
   return '请求失败';
 }
 
-async function requestJson<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getStoredAccessToken();
-  if (!token) throw new Error('请先登录后再查看分析结果');
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(options.headers || {}) },
-  });
-  const body = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(errorMessage(body));
-  return body as T;
+function requestJson<T>(path: string, options: RequestInit = {}) {
+  return authorizedJson<T>(path, options, '请先登录后再查看分析结果');
 }
 
 export function fetchLatestTaskResult(signal?: AbortSignal) {
@@ -45,9 +36,7 @@ export function createTaskExport(taskId: number, items: string[], name?: string)
 }
 
 export async function downloadProtectedFile(path: string, fallbackName: string) {
-  const token = getStoredAccessToken();
-  if (!token) throw new Error('请先登录后再下载文件');
-  const response = await fetch(`${API_BASE_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+  const response = await authorizedFetch(path, {}, '请先登录后再下载文件');
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     throw new Error(errorMessage(body));
