@@ -1,8 +1,16 @@
+-- 当前数据库结构快照，仅用于初始化和人工核对；生产环境迁移入口是 Alembic。
+-- 部署或升级时请先执行：python -m alembic upgrade head
+
 CREATE DATABASE IF NOT EXISTS soft_web
   DEFAULT CHARACTER SET utf8mb4
   DEFAULT COLLATE utf8mb4_unicode_ci;
 
 USE soft_web;
+
+CREATE TABLE IF NOT EXISTS alembic_version (
+  version_num VARCHAR(32) NOT NULL,
+  PRIMARY KEY (version_num)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version VARCHAR(128) NOT NULL,
@@ -16,6 +24,7 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 CREATE TABLE IF NOT EXISTS users (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   username VARCHAR(64) NOT NULL,
+  email VARCHAR(255) NULL,
   password_hash VARCHAR(255) NOT NULL,
   role VARCHAR(32) NOT NULL DEFAULT 'user',
   status VARCHAR(32) NOT NULL DEFAULT 'active',
@@ -24,7 +33,24 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uk_users_username (username),
+  UNIQUE KEY ix_users_email (email),
   KEY idx_users_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS email_verification_codes (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  email VARCHAR(255) NOT NULL,
+  purpose VARCHAR(32) NOT NULL DEFAULT 'register',
+  code_hash VARCHAR(255) NOT NULL,
+  client_ip VARCHAR(64) NULL,
+  expires_at DATETIME NOT NULL,
+  consumed_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_email_verification_codes_email (email),
+  KEY idx_email_verification_codes_purpose (purpose),
+  KEY idx_email_verification_codes_expires_at (expires_at),
+  KEY idx_email_verification_codes_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS user_sessions (
@@ -96,6 +122,68 @@ CREATE TABLE IF NOT EXISTS analysis_tasks (
     FOREIGN KEY (user_id) REFERENCES users(id)
     ON DELETE CASCADE,
   CONSTRAINT fk_analysis_tasks_dataset_id
+    FOREIGN KEY (dataset_id) REFERENCES datasets(id)
+    ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS dataset_revisions (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  dataset_id BIGINT UNSIGNED NOT NULL,
+  version INT UNSIGNED NOT NULL,
+  action VARCHAR(32) NOT NULL,
+  name VARCHAR(128) NOT NULL,
+  original_filename VARCHAR(255) NOT NULL,
+  storage_path VARCHAR(500) NOT NULL,
+  file_hash VARCHAR(128) NOT NULL,
+  sample_count INT UNSIGNED NOT NULL,
+  base_cluster_count INT UNSIGNED NOT NULL,
+  has_ground_truth TINYINT(1) NOT NULL DEFAULT 0,
+  cluster_count INT UNSIGNED NULL,
+  quality_status VARCHAR(16) NOT NULL DEFAULT 'ready',
+  quality_issues_json JSON NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_dataset_revisions_dataset_id (dataset_id),
+  KEY idx_dataset_revisions_created_at (created_at),
+  CONSTRAINT fk_dataset_revisions_dataset_id
+    FOREIGN KEY (dataset_id) REFERENCES datasets(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS dataset_qualities (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  dataset_id BIGINT UNSIGNED NOT NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'ready',
+  issues_json JSON NULL,
+  checked_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_dataset_qualities_dataset_id (dataset_id),
+  KEY idx_dataset_qualities_dataset_id (dataset_id),
+  KEY idx_dataset_qualities_status (status),
+  CONSTRAINT fk_dataset_qualities_dataset_id
+    FOREIGN KEY (dataset_id) REFERENCES datasets(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 历史草稿任务表，仅供 P0-01 Alembic 迁移读取；运行时业务统一使用 analysis_tasks。
+CREATE TABLE IF NOT EXISTS dataset_tasks (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  dataset_id BIGINT UNSIGNED NOT NULL,
+  name VARCHAR(128) NOT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'draft',
+  selected_base_count INT UNSIGNED NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_dataset_tasks_user_id (user_id),
+  KEY idx_dataset_tasks_dataset_id (dataset_id),
+  KEY idx_dataset_tasks_status (status),
+  KEY idx_dataset_tasks_created_at (created_at),
+  CONSTRAINT fk_dataset_tasks_user_id
+    FOREIGN KEY (user_id) REFERENCES users(id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_dataset_tasks_dataset_id
     FOREIGN KEY (dataset_id) REFERENCES datasets(id)
     ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

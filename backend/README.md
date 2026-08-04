@@ -4,15 +4,27 @@
 
 ## 启动
 
+启动前必须先完成 Alembic 迁移。应用启动阶段只读取 `alembic_version`，不会自动创建表或执行 `ALTER TABLE`。
+
 ```powershell
-cd "F:\研究生阶段\实验室项目\soft_web\backend"
+cd "G:\研究生阶段\实验室项目\soft_web\backend"
+python -m alembic upgrade head
 python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
+
+已有数据库升级步骤：
+
+1. 先备份数据库，并核对当前表结构、外键和索引已经包含 P0-01 的变更。
+2. 确认旧的 P0-01 SQL 迁移已完成，且 `schema_migrations` 中存在 `20260804_p0_01_unify_task_references`。
+3. 仅在核验通过后执行 `python -m alembic stamp 20260804_0002`，将现有结构登记为当前版本。
+4. 如果旧库尚未完成 P0-01 数据迁移，不得直接 `stamp`；先执行对应 Alembic 迁移，再检查迁移结果。
+
+`backend/sql/schema.sql` 是当前结构快照和人工核对材料，不是生产环境的迁移入口。历史表 `dataset_tasks` 和旧审计表 `schema_migrations` 会保留，但运行时业务只查询 `analysis_tasks`。
 
 如果仓库根目录的脚本可用，也可以执行：
 
 ```powershell
-cd "F:\研究生阶段\实验室项目\soft_web"
+cd "G:\研究生阶段\实验室项目\soft_web"
 .\scripts\start-backend.ps1
 ```
 
@@ -36,6 +48,6 @@ cd "F:\研究生阶段\实验室项目\soft_web"
 ## 测试
 
 ```powershell
-cd "F:\研究生阶段\实验室项目\soft_web\backend"
+cd "G:\研究生阶段\实验室项目\soft_web\backend"
 pytest
 ```

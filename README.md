@@ -158,8 +158,14 @@ http://127.0.0.1:5173
 初始化数据库：
 
 ```bash
-mysql -u root -p < backend/sql/schema.sql
+# 生产和开发环境使用 Alembic 初始化，不要把 schema.sql 当作迁移入口。
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS soft_web CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+cd backend
+python -m alembic upgrade head
+cd ..
 ```
+
+`backend/sql/schema.sql` 仅保留为当前结构快照。已有数据库必须先备份并核验结构；确认旧 P0-01 迁移已经完成后，在 `backend` 目录执行 `python -m alembic stamp 20260804_0002`。应用启动时会只读检查 `alembic_version`，版本缺失或落后会拒绝启动。
 
 配置数据库连接：
 

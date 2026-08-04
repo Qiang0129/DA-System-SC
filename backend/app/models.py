@@ -208,7 +208,12 @@ class OperationLog(Base):
 
     id: Mapped[int] = mapped_column(IDENTIFIER_TYPE, primary_key=True, autoincrement=True)
     user_id: Mapped[int | None] = mapped_column(IDENTIFIER_TYPE, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    task_id: Mapped[int | None] = mapped_column(IDENTIFIER_TYPE, nullable=True, index=True)
+    task_id: Mapped[int | None] = mapped_column(
+        IDENTIFIER_TYPE,
+        ForeignKey("analysis_tasks.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     action: Mapped[str] = mapped_column(String(64), index=True)
     level: Mapped[str] = mapped_column(String(16), default="info")
     message: Mapped[str] = mapped_column(String(500))
