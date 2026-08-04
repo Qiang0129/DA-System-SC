@@ -2,11 +2,29 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote_plus
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
+JWT_SECRET_PLACEHOLDER = "replace_with_a_random_secret"
+MIN_JWT_SECRET_BYTES = 32
+
+
+def validate_jwt_secret_key(value: str | None, app_env: str) -> str:
+    """校验 JWT 密钥，避免应用在空密钥或弱密钥下运行。"""
+    environment = (app_env or "development").strip().lower()
+    secret = (value or "").strip()
+
+    if not secret:
+        if environment == "production":
+            raise ValueError("生产环境必须配置 JWT_SECRET_KEY")
+        raise ValueError(f"{environment} 环境必须配置 JWT_SECRET_KEY")
+    if secret == JWT_SECRET_PLACEHOLDER:
+        raise ValueError("JWT_SECRET_KEY 仍是配置模板占位值，请替换为随机密钥")
+    if len(secret.encode("utf-8")) < MIN_JWT_SECRET_BYTES:
+        raise ValueError(f"JWT_SECRET_KEY 至少需要 {MIN_JWT_SECRET_BYTES} 字节")
+    return secret
 
 
 class Settings(BaseSettings):
@@ -28,7 +46,7 @@ class Settings(BaseSettings):
     db_pool_recycle: int = Field(1800, validation_alias="DB_POOL_RECYCLE")
     db_echo_sql: bool = Field(False, validation_alias="DB_ECHO_SQL")
 
-    jwt_secret_key: str = Field("soft-web-local-dev-secret", validation_alias="JWT_SECRET_KEY")
+    jwt_secret_key: str | None = Field(None, validation_alias="JWT_SECRET_KEY")
     jwt_algorithm: str = Field("HS256", validation_alias="JWT_ALGORITHM")
     access_token_expire_minutes: int = Field(30, validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES")
     refresh_token_expire_days: int = Field(7, validation_alias="REFRESH_TOKEN_EXPIRE_DAYS")
@@ -71,6 +89,11 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @model_validator(mode="after")
+    def validate_security_settings(self):
+        self.jwt_secret_key = validate_jwt_secret_key(self.jwt_secret_key, self.app_env)
+        return self
 
     @property
     def database_url(self) -> str:

@@ -6,13 +6,24 @@ from sqlalchemy import inspect, text
 
 from app.auth import router as auth_router
 from app.datasets import router as datasets_router
-from app.config import get_settings
+from app.config import Settings, get_settings, validate_jwt_secret_key
 from app.database import Base, engine
 from app.task_executor import task_execution_manager
 from app.tasks import router as tasks_router
 
 
 settings = get_settings()
+
+
+def validate_startup_configuration(current_settings: Settings) -> None:
+    """启动前再次校验安全配置，防止绕过 Settings 校验后继续提供服务。"""
+    try:
+        validate_jwt_secret_key(current_settings.jwt_secret_key, current_settings.app_env)
+    except ValueError as exc:
+        raise RuntimeError(f"启动配置无效：{exc}") from exc
+
+
+validate_startup_configuration(settings)
 
 app = FastAPI(title="OMELET Lab API")
 
