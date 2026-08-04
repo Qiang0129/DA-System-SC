@@ -10,13 +10,14 @@ import numpy as np
 import scipy.io as sio
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
-from sqlalchemy import asc, desc, func, select
+from sqlalchemy import asc, case, desc, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .auth import get_current_user
 from .config import get_settings
 from .database import get_session
-from .models import Dataset, DatasetQuality, DatasetRevision, DatasetTask, User
+from .models import AnalysisTask, Dataset, DatasetQuality, DatasetRevision, User
 from .schemas import (
     DatasetBulkRequest,
     DatasetCatalogItemResponse,
@@ -306,20 +307,32 @@ def _stored_file_size(dataset: Dataset) -> int:
     return path.stat().st_size
 
 
-def _task_summaries(session: Session, dataset_ids: list[int]) -> dict[int, tuple[int, datetime | None]]:
+def _task_summaries(
+    session: Session,
+    user_id: int,
+    dataset_ids: list[int],
+) -> dict[int, tuple[int, datetime | None]]:
     if not dataset_ids:
         return {}
 
     rows = session.execute(
         select(
-            DatasetTask.dataset_id,
-            func.count(DatasetTask.id),
-            func.max(DatasetTask.updated_at),
+            AnalysisTask.dataset_id,
+            func.count(AnalysisTask.id),
+            func.max(
+                case(
+                    (AnalysisTask.status == "succeeded", AnalysisTask.finished_at),
+                    else_=None,
+                ),
+            ),
         )
-        .where(DatasetTask.dataset_id.in_(dataset_ids))
-        .group_by(DatasetTask.dataset_id),
+        .where(
+            AnalysisTask.user_id == user_id,
+            AnalysisTask.dataset_id.in_(dataset_ids),
+        )
+        .group_by(AnalysisTask.dataset_id),
     ).all()
-    return {int(dataset_id): (int(count), last_updated) for dataset_id, count, last_updated in rows}
+    return {int(dataset_id): (int(count), last_finished_at) for dataset_id, count, last_finished_at in rows}
 
 
 def _catalog_item(
@@ -338,7 +351,11 @@ def _catalog_item(
     current_version = session.scalar(
         select(func.max(DatasetRevision.version)).where(DatasetRevision.dataset_id == dataset.id),
     )
-    task_count, last_analysis_at = task_summary or _task_summaries(session, [dataset.id]).get(dataset.id, (0, None))
+    task_count, last_analysis_at = task_summary or _task_summaries(
+        session,
+        dataset.user_id,
+        [dataset.id],
+    ).get(dataset.id, (0, None))
 
     return DatasetCatalogItemResponse(
         id=dataset.id,
@@ -486,10 +503,10 @@ def _ensure_quality_records(session: Session, datasets: list[Dataset]) -> None:
 def _delete_datasets(session: Session, datasets: list[Dataset]) -> set[Path]:
     dataset_ids = [dataset.id for dataset in datasets]
     task_count = session.scalar(
-        select(func.count(DatasetTask.id)).where(DatasetTask.dataset_id.in_(dataset_ids)),
+        select(func.count(AnalysisTask.id)).where(AnalysisTask.dataset_id.in_(dataset_ids)),
     )
     if task_count:
-        raise HTTPException(409, f"所选数据集仍被 {task_count} 个任务引用，无法删除")
+        raise HTTPException(409, f"数据集仍被 {task_count} 个分析任务引用，请先删除关联任务后再删除数据集")
 
     revision_paths = session.scalars(
         select(DatasetRevision.storage_path).where(DatasetRevision.dataset_id.in_(dataset_ids)),
@@ -499,7 +516,11 @@ def _delete_datasets(session: Session, datasets: list[Dataset]) -> set[Path]:
 
     for dataset in datasets:
         session.delete(dataset)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(409, "数据集已被分析任务引用，请先删除关联任务后再删除数据集") from exc
     return storage_paths
 
 
@@ -532,7 +553,7 @@ def list_datasets(
     if quality_status in {"ready", "warning", "error"}:
         stmt = stmt.join(DatasetQuality).where(DatasetQuality.status == quality_status)
     if usage in {"used", "unused"}:
-        referenced_dataset_ids = select(DatasetTask.dataset_id).where(DatasetTask.user_id == user.id)
+        referenced_dataset_ids = select(AnalysisTask.dataset_id).where(AnalysisTask.user_id == user.id)
         if usage == "used":
             stmt = stmt.where(Dataset.id.in_(referenced_dataset_ids))
         else:
@@ -540,9 +561,9 @@ def list_datasets(
 
     total = int(session.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
     task_count_subquery = (
-        select(DatasetTask.dataset_id, func.count(DatasetTask.id).label("task_count"))
-        .where(DatasetTask.user_id == user.id)
-        .group_by(DatasetTask.dataset_id)
+        select(AnalysisTask.dataset_id, func.count(AnalysisTask.id).label("task_count"))
+        .where(AnalysisTask.user_id == user.id)
+        .group_by(AnalysisTask.dataset_id)
         .subquery()
     )
     sort_columns = {
@@ -567,7 +588,7 @@ def list_datasets(
             select(DatasetQuality).where(DatasetQuality.dataset_id.in_([dataset.id for dataset in datasets])),
         ).all()
     }
-    task_summaries = _task_summaries(session, [dataset.id for dataset in datasets])
+    task_summaries = _task_summaries(session, user.id, [dataset.id for dataset in datasets])
     total_pages = max(1, (total + page_size - 1) // page_size) if total else 0
 
     return DatasetCatalogPageResponse(

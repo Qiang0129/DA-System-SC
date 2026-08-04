@@ -141,32 +141,6 @@ class DatasetRevisionResponse(BaseModel):
     qualityIssues: list[str] = Field(default_factory=list)
 
 
-class DatasetTaskCreateRequest(BaseModel):
-    datasetId: int
-    name: str | None = Field(default=None, max_length=128)
-    selectedBaseCount: int = Field(default=0, ge=0)
-
-
-class DatasetTaskBulkCreateRequest(BaseModel):
-    datasetIds: list[int] = Field(min_length=1, max_length=100)
-
-
-class DatasetTaskResponse(BaseModel):
-    id: int
-    datasetId: int
-    datasetName: str
-    name: str
-    status: str
-    selectedBaseCount: int
-    createdAt: str
-    updatedAt: str
-
-
-class DatasetTaskPageResponse(BaseModel):
-    items: list[DatasetTaskResponse] = Field(default_factory=list)
-    total: int
-
-
 class AnalysisTaskParams(BaseModel):
     nBase: int = Field(default=20, ge=1, le=500)
     sigma: float = Field(default=1.0, ge=0)

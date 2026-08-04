@@ -366,7 +366,7 @@ function getDatasetLabelSummary(dataset: DatasetCatalogItem) {
 
 function getDatasetUsageSummary(dataset: DatasetCatalogItem) {
   if (dataset.taskCount <= 0) return '未使用';
-  return dataset.lastAnalysisAt ? `${dataset.taskCount} 任务 · ${dataset.lastAnalysisAt}` : `${dataset.taskCount} 任务`;
+  return `${dataset.taskCount} 任务 · ${dataset.lastAnalysisAt ?? '—'}`;
 }
 
 function getDatasetQualityPresentation(dataset: DatasetCatalogItem) {
@@ -733,7 +733,7 @@ function DatasetCatalogView({
                   </span>
                   <span
                     className={`dataset-usage-status ${d.taskCount > 0 ? 'used' : 'unused'}`}
-                    title={d.taskCount > 0 ? `${d.taskCount} 任务 · ${d.lastAnalysisAt}` : undefined}
+                    title={d.taskCount > 0 ? getDatasetUsageSummary(d) : undefined}
                   >
                     {getDatasetUsageSummary(d)}
                   </span>

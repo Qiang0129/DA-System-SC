@@ -4,6 +4,15 @@ CREATE DATABASE IF NOT EXISTS soft_web
 
 USE soft_web;
 
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  version VARCHAR(128) NOT NULL,
+  description VARCHAR(255) NOT NULL,
+  migrated_rows INT UNSIGNED NOT NULL DEFAULT 0,
+  skipped_rows INT UNSIGNED NOT NULL DEFAULT 0,
+  applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (version)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS users (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   username VARCHAR(64) NOT NULL,
@@ -81,12 +90,14 @@ CREATE TABLE IF NOT EXISTS analysis_tasks (
   KEY idx_analysis_tasks_dataset_id (dataset_id),
   KEY idx_analysis_tasks_status (status),
   KEY idx_analysis_tasks_created_at (created_at),
+  KEY idx_analysis_tasks_user_dataset (user_id, dataset_id),
+  KEY idx_analysis_tasks_dataset_status_finished (dataset_id, status, finished_at),
   CONSTRAINT fk_analysis_tasks_user_id
     FOREIGN KEY (user_id) REFERENCES users(id)
     ON DELETE CASCADE,
   CONSTRAINT fk_analysis_tasks_dataset_id
     FOREIGN KEY (dataset_id) REFERENCES datasets(id)
-    ON DELETE CASCADE
+    ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS task_templates (

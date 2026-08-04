@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.dialects import mysql
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -118,33 +118,18 @@ class DatasetQuality(Base):
     checked_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
-class DatasetTask(Base):
-    """历史草稿任务表，数据管理页仍会统计；任务中心主实体已切换到 analysis_tasks。"""
-
-    __tablename__ = "dataset_tasks"
-
-    id: Mapped[int] = mapped_column(IDENTIFIER_TYPE, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(IDENTIFIER_TYPE, ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    dataset_id: Mapped[int] = mapped_column(IDENTIFIER_TYPE, ForeignKey("datasets.id", ondelete="RESTRICT"), index=True)
-    name: Mapped[str] = mapped_column(String(128))
-    status: Mapped[str] = mapped_column(String(32), default="draft", index=True)
-    selected_base_count: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
-
-
 class AnalysisTask(Base):
     """分析执行任务：承接 OMELET / OMELET-SV 的创建、调度、进度与结果关联。"""
 
     __tablename__ = "analysis_tasks"
+    __table_args__ = (
+        Index("idx_analysis_tasks_user_dataset", "user_id", "dataset_id"),
+        Index("idx_analysis_tasks_dataset_status_finished", "dataset_id", "status", "finished_at"),
+    )
 
     id: Mapped[int] = mapped_column(IDENTIFIER_TYPE, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(IDENTIFIER_TYPE, ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    dataset_id: Mapped[int] = mapped_column(IDENTIFIER_TYPE, ForeignKey("datasets.id", ondelete="CASCADE"), index=True)
+    dataset_id: Mapped[int] = mapped_column(IDENTIFIER_TYPE, ForeignKey("datasets.id", ondelete="RESTRICT"), index=True)
     name: Mapped[str] = mapped_column(String(128), default="")
     mode: Mapped[str] = mapped_column(String(32), default="OMELET-SV")
     status: Mapped[str] = mapped_column(String(32), default="draft", index=True)

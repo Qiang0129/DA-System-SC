@@ -901,6 +901,30 @@ describe('dashboard homepage', () => {
     expect(within(row).getByText('未使用')).toBeInTheDocument();
   });
 
+  it('shows a dash when a used dataset has no successful analysis yet', async () => {
+    const pendingDataset = createDataset({
+      name: 'draft_analysis_dataset',
+      taskCount: 2,
+      lastAnalysisAt: null,
+    });
+    const completedDataset = createDataset({
+      id: 9,
+      name: 'completed_analysis_dataset',
+      taskCount: 3,
+      lastAnalysisAt: '2026-08-04 10:20:30',
+    });
+    localStorage.setItem('soft_web_access_token', 'access-token');
+    mockDatasetApi({ datasets: [pendingDataset, completedDataset] });
+
+    renderApp('/workbench/datasets');
+
+    expect(await screen.findByText('2 任务 · —')).toHaveAttribute('title', '2 任务 · —');
+    expect(screen.getByText('3 任务 · 2026-08-04 10:20:30')).toHaveAttribute(
+      'title',
+      '3 任务 · 2026-08-04 10:20:30',
+    );
+  });
+
   it('opens the custom rename dialog and persists the new name', async () => {
     const dataset = createDataset();
     const renamedDataset = createDataset({ name: 'renamed_upload' });
