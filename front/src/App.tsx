@@ -23,9 +23,10 @@ import {
   clearAuthSession,
   logout as logoutFromApi,
   restoreAuthSession,
+  subscribeAuthSession,
   type AuthUser,
 } from './api/auth';
-import { API_BASE_URL } from './api/config';
+import { publicFetch } from './api/client';
 import {
   dashboardGroups,
   dashboardNavItems,
@@ -33,8 +34,6 @@ import {
   getActiveWorkbenchSection,
   legacyWorkbenchRedirects,
 } from './dashboard/navigation';
-
-const API = API_BASE_URL;
 
 const resultWorkbenchSections = new Set([
   'analysis',
@@ -286,6 +285,20 @@ function App() {
     setSidebarOpen(false);
   }, [navigate]);
 
+  useEffect(() => subscribeAuthSession((event) => {
+    setCurrentUser(null);
+    setSidebarOpen(false);
+
+    if (event.reason === 'logout') {
+      navigate('/', { replace: true });
+      return;
+    }
+
+    if (!['/login', '/register'].includes(location.pathname)) {
+      navigate('/login', { replace: true });
+    }
+  }), [location.pathname, navigate]);
+
   const enterWorkbench = useCallback(async () => {
     if (workbenchEntryPending) return;
 
@@ -312,7 +325,7 @@ function App() {
       return;
     }
     try {
-      const response = await fetch(`${API}/health`);
+      const response = await publicFetch('/health');
       if (!response.ok) {
         throw new Error('health check failed');
       }

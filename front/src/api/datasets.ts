@@ -1,4 +1,4 @@
-import { authorizedJson } from './auth';
+import { apiJson } from './client';
 
 export type DatasetQualityStatus = 'ready' | 'warning' | 'error';
 
@@ -45,7 +45,11 @@ export type DatasetRevision = {
 };
 
 async function requestJson<T>(path: string, options: RequestInit = {}): Promise<T> {
-  return authorizedJson<T>(path, options, '请先登录后再查看数据集信息');
+  return apiJson<T>(path, {
+    ...options,
+    auth: true,
+    unauthenticatedMessage: '请先登录后再查看数据集信息',
+  });
 }
 
 export async function fetchDatasetCatalog(pageSize = 100): Promise<DatasetCatalogPage> {

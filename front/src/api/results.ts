@@ -1,19 +1,17 @@
-import { authorizedFetch, authorizedJson } from './auth';
+import {
+  apiFetch,
+  apiJson,
+  ensureApiResponse,
+  PROTECTED_DOWNLOAD_TIMEOUT_MS,
+} from './client';
 import type { TaskExport, TaskResultEnvelope } from '../workbench/results/types';
 
-function errorMessage(body: unknown) {
-  if (body && typeof body === 'object' && 'detail' in body) {
-    const detail = (body as { detail?: unknown }).detail;
-    if (typeof detail === 'string') return detail;
-    if (detail && typeof detail === 'object' && 'message' in detail) {
-      return String((detail as { message?: unknown }).message || '请求失败');
-    }
-  }
-  return '请求失败';
-}
-
 function requestJson<T>(path: string, options: RequestInit = {}) {
-  return authorizedJson<T>(path, options, '请先登录后再查看分析结果');
+  return apiJson<T>(path, {
+    ...options,
+    auth: true,
+    unauthenticatedMessage: '请先登录后再查看分析结果',
+  });
 }
 
 export function fetchLatestTaskResult(signal?: AbortSignal) {
@@ -36,11 +34,12 @@ export function createTaskExport(taskId: number, items: string[], name?: string)
 }
 
 export async function downloadProtectedFile(path: string, fallbackName: string) {
-  const response = await authorizedFetch(path, {}, '请先登录后再下载文件');
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(errorMessage(body));
-  }
+  const response = await apiFetch(path, {
+    auth: true,
+    timeoutMs: PROTECTED_DOWNLOAD_TIMEOUT_MS,
+    unauthenticatedMessage: '请先登录后再下载文件',
+  });
+  await ensureApiResponse(response, '下载文件失败');
   const blob = await response.blob();
   const header = response.headers.get('content-disposition') || '';
   const matched = /filename="?([^";]+)"?/i.exec(header);

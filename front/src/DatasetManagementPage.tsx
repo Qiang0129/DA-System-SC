@@ -17,7 +17,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { authorizedFetch } from './api/auth';
+import { apiJson, DATASET_UPLOAD_TIMEOUT_MS } from './api/client';
 import { SelectField } from './components/SelectField';
 import { formatLocalDateTime } from './utils/time';
 
@@ -1103,14 +1103,10 @@ export function DatasetManagementPage() {
     async function loadDatasets() {
       try {
         setLoadError(null);
-        const res = await authorizedFetch('/datasets', {}, '请先登录后操作数据集');
-
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(typeof err.detail === 'string' ? err.detail : '加载数据集失败');
-        }
-
-        const data = (await res.json()) as DatasetCatalogPayload;
+        const data = await apiJson<DatasetCatalogPayload>('/datasets', {
+          auth: true,
+          unauthenticatedMessage: '请先登录后操作数据集',
+        });
         if (!cancelled) {
           setDatasets(extractDatasetItems(data).map(normalizeDataset));
         }
@@ -1158,17 +1154,13 @@ export function DatasetManagementPage() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const res = await authorizedFetch(appendTargetId ? `/datasets/${appendTargetId}/append` : '/datasets', {
+      const data = await apiJson<DatasetCatalogItem>(appendTargetId ? `/datasets/${appendTargetId}/append` : '/datasets', {
         method: 'POST',
         body: formData,
-      }, '请先登录后操作数据集');
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(typeof err.detail === 'string' ? err.detail : appendTargetId ? '追加失败' : '上传失败');
-      }
-
-      const data = await res.json();
+        auth: true,
+        timeoutMs: DATASET_UPLOAD_TIMEOUT_MS,
+        unauthenticatedMessage: '请先登录后操作数据集',
+      });
       const savedDataset = normalizeDataset(data);
 
       setDatasets((prev) => {
@@ -1207,33 +1199,25 @@ export function DatasetManagementPage() {
   }
 
   async function submitRename(dataset: DatasetCatalogItem, nextName: string) {
-    const res = await authorizedFetch(`/datasets/${dataset.id}`, {
+    const renamedDataset = normalizeDataset(await apiJson<DatasetCatalogItem>(`/datasets/${dataset.id}`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ name: nextName }),
-    }, '请先登录后操作数据集');
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(typeof err.detail === 'string' ? err.detail : '重命名失败');
-    }
-
-    const renamedDataset = normalizeDataset(await res.json());
+      auth: true,
+      unauthenticatedMessage: '请先登录后操作数据集',
+    }));
     setDatasets((prev) => prev.map((item) => (item.id === dataset.id ? renamedDataset : item)));
     setRenameTarget(null);
   }
 
   async function submitDelete(dataset: DatasetCatalogItem) {
-    const res = await authorizedFetch(`/datasets/${dataset.id}`, {
+    await apiJson<{ message: string }>(`/datasets/${dataset.id}`, {
       method: 'DELETE',
-    }, '请先登录后操作数据集');
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(typeof err.detail === 'string' ? err.detail : '删除失败');
-    }
+      auth: true,
+      unauthenticatedMessage: '请先登录后操作数据集',
+    });
 
     setDatasets((prev) => prev.filter((item) => item.id !== dataset.id));
     setSelectedId(null);

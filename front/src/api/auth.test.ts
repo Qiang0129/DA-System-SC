@@ -48,10 +48,10 @@ describe('认证请求层', () => {
     globalThis.fetch = fetchMock as typeof fetch;
 
     await expect(refreshAccessToken()).resolves.toBe('fresh-token');
-    expect(fetchMock).toHaveBeenCalledWith('/api/auth/refresh', {
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/refresh', expect.objectContaining({
       method: 'POST',
       credentials: 'include',
-    });
+    }));
     expect(getAccessToken()).toBe('fresh-token');
   });
 
@@ -71,7 +71,7 @@ describe('认证请求层', () => {
     const refreshOptions = fetchMock.mock.calls[1]?.[1] as RequestInit;
     const retryOptions = fetchMock.mock.calls[2]?.[1] as RequestInit;
     expect((firstOptions.headers as Headers).get('Authorization')).toBe('Bearer expired-token');
-    expect(refreshOptions).toEqual({ method: 'POST', credentials: 'include' });
+    expect(refreshOptions).toEqual(expect.objectContaining({ method: 'POST', credentials: 'include' }));
     expect((retryOptions.headers as Headers).get('Authorization')).toBe('Bearer rotated-token');
     expect(retryOptions.credentials).toBe('include');
   });

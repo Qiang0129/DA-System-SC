@@ -1,8 +1,8 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
-import { setAccessToken } from './api/auth';
+import { notifyAuthUnauthorized, setAccessToken } from './api/auth';
 import { formatLocalDateTime } from './utils/time';
 import type { MatrixPreview, TaskResultEnvelope } from './workbench/results/types';
 
@@ -414,6 +414,20 @@ describe('dashboard homepage', () => {
 
     expect(await screen.findByRole('heading', { name: '登录', level: 1 })).toBeInTheDocument();
     expect(window.location.pathname).toBe('/login');
+  });
+
+  it('收到全局认证失效事件后统一清理状态并返回登录页', async () => {
+    setAccessToken('access-token');
+    localStorage.setItem('soft_web_user', JSON.stringify(authBody.user));
+    mockAuthApi();
+    renderApp('/workbench/analysis');
+
+    await screen.findByRole('heading', { name: '分析工作台', level: 1 });
+    act(() => notifyAuthUnauthorized());
+
+    expect(await screen.findByRole('heading', { name: '登录', level: 1 })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/login');
+    expect(localStorage.getItem('soft_web_user')).toBeNull();
   });
 
   it('renders the dashboard shell after logging in', async () => {

@@ -1,4 +1,4 @@
-import { authorizedFetch, authorizedJson } from './auth';
+import { apiJson } from './client';
 import type {
   AnalysisTask,
   AnalysisTaskLog,
@@ -10,7 +10,11 @@ import type {
 } from '../workbench/tasks/types';
 
 async function requestJson<T>(path: string, options: RequestInit = {}): Promise<T> {
-  return authorizedJson<T>(path, options, '请先登录后再操作任务中心');
+  return apiJson<T>(path, {
+    ...options,
+    auth: true,
+    unauthenticatedMessage: '请先登录后再操作任务中心',
+  });
 }
 
 function toQuery(params: Record<string, string | number | undefined | null>) {
@@ -114,16 +118,16 @@ export function deleteTaskTemplate(templateId: number) {
 }
 
 export async function fetchDatasetOptions() {
-  const response = await authorizedFetch(
+  const body = await apiJson<{
+    items?: Array<Record<string, unknown>>;
+  } | Array<Record<string, unknown>>>(
     '/datasets?page=1&pageSize=100',
-    {},
-    '请先登录后再操作任务中心',
+    {
+      auth: true,
+      unauthenticatedMessage: '请先登录后再操作任务中心',
+    },
   );
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(typeof body.detail === 'string' ? body.detail : '加载数据集失败');
-  }
-  const items = Array.isArray(body.items) ? body.items : [];
+  const items = Array.isArray(body) ? body : Array.isArray(body.items) ? body.items : [];
   return items.map((item: any) => ({
     id: Number(item.id),
     name: String(item.name ?? ''),
