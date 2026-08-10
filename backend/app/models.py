@@ -1,3 +1,8 @@
+"""业务数据模型及删除策略。
+
+数据集被任务引用时禁止物理删除；任务删除后结果和导出记录由级联关系清理，磁盘文件另由清理队列处理。
+"""
+
 from datetime import datetime
 
 from sqlalchemy import BigInteger, Boolean, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
@@ -69,6 +74,7 @@ class UserSession(Base):
 
 
 class Dataset(Base):
+    """用户上传数据集的当前版本，历史文件由 DatasetRevision 单独保留。"""
     __tablename__ = "datasets"
     __table_args__ = (
         Index("idx_datasets_user_created_at", "user_id", "created_at"),
@@ -135,7 +141,10 @@ class DatasetQuality(Base):
 
 
 class AnalysisTask(Base):
-    """分析执行任务：承接 OMELET / OMELET-SV 的创建、调度、进度与结果关联。"""
+    """正式分析任务；承接 OMELET / OMELET-SV 的创建、调度、进度和结果关联。
+
+    worker_id 与 heartbeat_at 共同表示当前执行租约，避免多个调度实例重复领取同一任务。
+    """
 
     __tablename__ = "analysis_tasks"
     __table_args__ = (
@@ -180,6 +189,7 @@ class AnalysisTask(Base):
 
 
 class TaskResult(Base):
+    """任务唯一结果索引，矩阵和标签等大文件只在数据库中保存受控路径。"""
     __tablename__ = "task_results"
     __table_args__ = (
         UniqueConstraint("task_id", name="uk_task_results_task_id"),
@@ -205,6 +215,7 @@ class TaskResult(Base):
 
 
 class TaskExport(Base):
+    """用户生成的交付档案记录，实际 ZIP 文件由存储清理队列维护生命周期。"""
     __tablename__ = "task_exports"
     __table_args__ = (
         Index("idx_task_exports_task_id_id", "task_id", "id"),
@@ -258,7 +269,7 @@ class OperationLog(Base):
 
 
 class StorageCleanupJob(Base):
-    """数据库提交后清理文件的事务性队列记录。"""
+    """数据库提交后异步删除磁盘文件的幂等队列任务。"""
 
     __tablename__ = "storage_cleanup_jobs"
     __table_args__ = (

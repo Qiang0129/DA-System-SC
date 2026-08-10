@@ -1,3 +1,7 @@
+/**
+ * 认证会话的前端生命周期管理。
+ * access token 只保存在内存中；refresh token 由后端通过 HttpOnly Cookie 管理，页面不能读取或持久化它。
+ */
 import { API_BASE_URL } from './config';
 import {
   ApiError,
@@ -151,6 +155,7 @@ function fetchRefreshToken() {
 }
 
 export async function refreshAccessToken(): Promise<string | null> {
+  // 刷新是跨请求的临界区，复用同一个 Promise 可避免多个 401 同时轮换 refresh token。
   if (refreshPromise) {
     return refreshPromise;
   }

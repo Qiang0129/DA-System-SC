@@ -1,3 +1,7 @@
+/**
+ * 前端统一请求边界：负责凭证注入、超时与取消、错误归类，以及 401 后的一次重试。
+ * 业务模块只描述接口路径和请求数据，不直接处理 Cookie、刷新并发或响应解析细节。
+ */
 import { API_BASE_URL } from './config';
 import {
   ApiError,
@@ -47,6 +51,7 @@ function buildHeaders(options: RequestInit, token: string | null) {
 }
 
 function createRequestSignal(timeoutMs: number, callerSignal?: AbortSignal) {
+  // 一个请求同时接受业务取消和超时取消，合并后的 signal 交给 fetch，避免悬挂请求占用页面资源。
   const controller = new AbortController();
   let timedOut = false;
   const timeoutId = setTimeout(() => {
@@ -160,6 +165,7 @@ export async function apiFetch(path: string, options: ApiRequestOptions = {}) {
   }
 
   throwIfAborted(requestInit.signal ?? undefined);
+  // 所有并发请求共享 auth-session 中的刷新 Promise；当前请求只在刷新成功后重试一次。
   let refreshedToken: string;
   try {
     refreshedToken = await refreshAccessTokenOrThrow();

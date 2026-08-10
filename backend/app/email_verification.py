@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .models import EmailVerificationCode, User
+from .product import SOFTWARE_SHORT_NAME
 from .security import utc_now
 
 
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 EMAIL_CODE_PURPOSE_REGISTER = "register"
 EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 EMAIL_CODE_PATTERN = re.compile(r"^\d{6}$")
-DEFAULT_EMAIL_BRAND_NAME = "OMELET Lab"
+DEFAULT_EMAIL_BRAND_NAME = SOFTWARE_SHORT_NAME
 EMAIL_BRAND_COLOR = "#2f8ff0"
 
 

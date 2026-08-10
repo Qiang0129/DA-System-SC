@@ -19,7 +19,7 @@
 | `get_kernel_fast_mat.m` | `omelet/get_kernel_fast_mat.py`, `omelet/kernel.py` |
 | `get_similarity_kernel1.mexw64` | `omelet/get_similarity_kernel1.py`, `omelet/kernel.py` |
 | `hungarian.m` | `omelet/hungarian.py` |
-| `ionosphere_base_clustering.mat` | `data/ionosphere_base_clustering.npz` and `.mat` |
+| `ionosphere_base_clustering.mat` | `tests/fixtures/ionosphere_base_clustering.npz` and `.mat` |
 | `kcenter.m` | `omelet/kcenter.py`, `omelet/kernel.py` |
 | `knorm.m` | `omelet/knorm.py`, `omelet/kernel.py` |
 | `myNMIACC.p` | `omelet/myNMIACC.py`, `omelet/metrics.py` |

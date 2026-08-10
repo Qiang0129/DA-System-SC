@@ -1,3 +1,8 @@
+"""分析任务业务接口。
+
+本模块负责用户权限、任务状态转换、结果与导出访问；实际子进程调度由 task_executor 独立承担。
+"""
+
 from __future__ import annotations
 
 import json
@@ -97,6 +102,7 @@ def _default_params(mode: str = "OMELET-SV") -> dict[str, Any]:
 
 
 def _normalize_params(mode: str, params: AnalysisTaskParams | dict | None) -> dict[str, Any]:
+    """把前端参数归一化为执行器可直接消费的稳定结构，并在入口处收紧数值范围。"""
     if params is None:
         data = _default_params(mode)
     elif isinstance(params, AnalysisTaskParams):
@@ -152,6 +158,7 @@ def _get_user_dataset(session: Session, dataset_id: int, user: User) -> Dataset:
 
 
 def _ensure_taskable(session: Session, dataset: Dataset) -> None:
+    """任务创建和启动共用的数据质量门槛，避免不可评估的数据进入执行队列。"""
     quality = session.scalar(select(DatasetQuality).where(DatasetQuality.dataset_id == dataset.id))
     if quality and quality.status == "error":
         raise HTTPException(422, "数据集质量检查未通过，无法创建或启动任务")
@@ -270,6 +277,7 @@ def _queue_task(
     *,
     increment_retry: bool = False,
 ) -> None:
+    """仅负责持久化排队状态；后台执行器再通过数据库事务原子领取任务。"""
     if task.status not in STARTABLE_STATUSES and task.status != "queued":
         raise HTTPException(422, f"当前状态不可启动: {task.status}")
 
@@ -594,6 +602,7 @@ def _result_artifact_paths(result: TaskResult) -> dict[str, Path]:
 
 
 def _safe_artifact_path(result: TaskResult, artifact_key: str) -> Path:
+    """只允许访问结果清单登记且位于任务目录内的文件，阻断路径穿越。"""
     path = _result_artifact_paths(result).get(artifact_key)
     if path is None or not path.is_file():
         raise HTTPException(404, "请求的结果产物不存在")
@@ -627,6 +636,7 @@ def _artifact_metadata(task_id: int, result: TaskResult) -> list[dict[str, Any]]
 
 
 def _result_envelope(session: Session, task: AnalysisTask, dataset_name: str) -> TaskResultEnvelope:
+    """将任务状态和已持久化结果合并为前端唯一的结果读取契约。"""
     response_task = _task_response(session, task, dataset_name)
     if task.status != "succeeded":
         return TaskResultEnvelope(state=task.status, task=response_task)
@@ -743,6 +753,7 @@ def create_task_export(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
+    """先生成受控临时档案再提交数据库，任何失败都不会留下未登记文件。"""
     task = _get_user_task(session, task_id, user)
     result = session.scalar(select(TaskResult).where(TaskResult.task_id == task_id, TaskResult.schema_version == 1))
     if result is None:
@@ -1024,6 +1035,7 @@ def delete_task(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
+    """业务记录在事务内删除，结果和导出文件由提交后的清理队列处理。"""
     task = _get_user_task(session, task_id, user)
     if task.status not in DELETABLE_STATUSES:
         raise HTTPException(422, "运行中或排队中的任务不可删除，请先取消")

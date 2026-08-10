@@ -266,38 +266,14 @@ def test_dataset_upload_enforces_user_storage_quota(tmp_path, monkeypatch):
     assert not list(user_storage.glob("*.mat"))
 
 
-def test_dataset_parse_and_example_mat_require_authentication():
+def test_dataset_parse_requires_authentication():
     client = _make_test_client()
     payload = _mat_file_payload({"E": np.array([[1, 2], [2, 3]])})
 
-    assert client.get("/api/datasets/example-mat").status_code == 401
     assert client.post(
         "/api/datasets/parse",
         files={"file": ("unauthenticated.mat", payload, "application/octet-stream")},
     ).status_code == 401
-
-
-def test_example_mat_hides_storage_path_and_is_disabled_in_production(monkeypatch):
-    settings = get_settings()
-    monkeypatch.setattr(settings, "app_env", "development")
-    client = _make_test_client()
-    headers = _register_and_headers(client)
-
-    response = client.get("/api/datasets/example-mat", headers=headers)
-
-    assert response.status_code == 200
-    body = response.json()
-    assert "path" not in body
-    assert str(Path(__file__).resolve().parents[2]) not in response.text
-    assert body["sampleCount"] > 0
-
-    monkeypatch.setattr(settings, "app_env", "production")
-    production_response = client.get("/api/datasets/example-mat", headers=headers)
-
-    assert production_response.status_code == 404
-    assert production_response.json()["detail"] == "示例数据接口仅在开发环境启用"
-
-
 def test_parse_failure_writes_error_log_and_python_exception(caplog):
     client, testing_session_local = _make_test_context()
     headers = _register_and_headers(client)

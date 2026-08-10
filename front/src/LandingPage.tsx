@@ -1,5 +1,6 @@
 import { type CSSProperties, useEffect, useState } from 'react';
 import { Boxes, ClipboardCheck, Database, Download, Network, type LucideIcon } from 'lucide-react';
+import { SOFTWARE_SHORT_NAME, SOFTWARE_VERSION } from './appMeta';
 import loginIcon from './images/登录.svg';
 import registerIcon from './images/注册.svg';
 import copyIcon from './images/复制.svg';
@@ -160,11 +161,11 @@ function TopBar() {
             <img className="brand-logo-image" src={brandLogo} width={32} height={32} alt="" aria-hidden="true" />
           </span>
           <span className="landing-brand-copy">
-            <strong>OMELET Lab</strong>
+            <strong>{SOFTWARE_SHORT_NAME}</strong>
           </span>
         </div>
-        <span className="landing-version-pill" aria-label="当前版本 v1.0.0">
-          v1.0.0
+        <span className="landing-version-pill" aria-label={`当前版本 ${SOFTWARE_VERSION}`}>
+          {SOFTWARE_VERSION}
         </span>
       </div>
     </header>

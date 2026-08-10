@@ -1,0 +1,39 @@
+{
+  "softwareName": "新材料数据分析---拓扑感知多核集成聚类分析系统",
+  "softwareShortName": "新材料数据分析系统",
+  "version": "V1.0",
+  "include": [
+    "backend/main.py",
+    "backend/app/**/*.py",
+    "front/src/**/*.ts",
+    "front/src/**/*.tsx",
+    "front/src/**/*.css"
+  ],
+  "exclude": [
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "front/src/test/**",
+    "front/src/vite-env.d.ts",
+    "front/src/images/**",
+    "ec_python_converted/**",
+    "backend/tests/**",
+    "backend/alembic/**",
+    "backend/sql/**"
+  ],
+  "submissionFirst": [
+    "backend/main.py",
+    "backend/app/product.py",
+    "backend/app/config.py",
+    "backend/app/database.py",
+    "backend/app/datasets.py",
+    "backend/app/models.py"
+  ],
+  "submissionLast": [
+    "front/src/appMeta.ts",
+    "front/src/App.tsx",
+    "front/src/api/auth-session.ts",
+    "front/src/api/client.ts",
+    "front/src/workbench/tasks/components/TaskCreateDrawer.tsx",
+    "front/src/workbench/results/TaskResultViews.tsx"
+  ]
+}

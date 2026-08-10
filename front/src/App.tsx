@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import './landing.css';
+import { SOFTWARE_SHORT_NAME } from './appMeta';
 import sidebarBrandLogo from './images/Logo.svg';
 import { LandingPage } from './LandingPage';
 import { AuthFlipCard } from './AuthPages';
@@ -86,7 +87,7 @@ function Sidebar({
         onClick={onClose}
       />
       <aside className={`sidebar ${open ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`}>
-        <div className="sidebar-brand" title="OMELET Lab">
+      <div className="sidebar-brand" title={SOFTWARE_SHORT_NAME}>
           <span className="brand-logo" aria-hidden="true">
             <img
               className="sidebar-brand-logo-image"
@@ -98,7 +99,7 @@ function Sidebar({
             />
           </span>
           <span className="brand-copy">
-            <strong translate="no">OMELET Lab</strong>
+        <strong>{SOFTWARE_SHORT_NAME}</strong>
             <small>新材料聚类分析</small>
           </span>
         </div>
@@ -164,7 +165,7 @@ function TopHeader({
           <Menu size={18} />
         </button>
         <div className="header-context">
-          <span>OMELET 工作台</span>
+          <span>{SOFTWARE_SHORT_NAME}工作台</span>
           <ChevronRight size={14} aria-hidden="true" />
           <div className="header-section-title" aria-label="当前模块">
             {activeSection}

@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     smtp_username: str = Field("", validation_alias="SMTP_USERNAME")
     smtp_password: str = Field("", validation_alias="SMTP_PASSWORD")
     smtp_from_email: str = Field("", validation_alias="SMTP_FROM_EMAIL")
-    smtp_from_name: str = Field("OMELET Lab", validation_alias="SMTP_FROM_NAME")
+    smtp_from_name: str = Field("新材料数据分析系统", validation_alias="SMTP_FROM_NAME")
     smtp_use_ssl: bool = Field(True, validation_alias="SMTP_USE_SSL")
     smtp_timeout_seconds: float = Field(10.0, validation_alias="SMTP_TIMEOUT_SECONDS")
 

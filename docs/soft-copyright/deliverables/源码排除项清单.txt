@@ -1,0 +1,13 @@
+软著源码 PDF 排除项
+
+- **/*.test.ts
+- **/*.test.tsx
+- front/src/test/**
+- front/src/vite-env.d.ts
+- front/src/images/**
+- ec_python_converted/**
+- backend/tests/**
+- backend/alembic/**
+- backend/sql/**
+
+说明：示例数据、算法转换实现、测试、迁移、SQL、依赖、日志、密钥配置和二进制文件不进入源码 PDF 主体。

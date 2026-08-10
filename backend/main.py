@@ -9,6 +9,7 @@ from app.datasets import router as datasets_router
 from app.config import Settings, get_settings, validate_jwt_secret_key
 from app.database import engine
 from app.migrations import ensure_database_is_current
+from app.product import SOFTWARE_NAME, SOFTWARE_VERSION
 from app.task_executor import task_execution_manager
 from app.tasks import router as tasks_router
 from app.storage_cleanup import process_pending_cleanup_jobs
@@ -28,7 +29,7 @@ def validate_startup_configuration(current_settings: Settings) -> None:
 
 validate_startup_configuration(settings)
 
-app = FastAPI(title="OMELET Lab API")
+app = FastAPI(title=f"{SOFTWARE_NAME} API {SOFTWARE_VERSION}")
 
 app.add_middleware(
     CORSMiddleware,
@@ -41,8 +42,6 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(datasets_router)
 app.include_router(tasks_router)
-
-
 @app.on_event("startup")
 def validate_database_schema():
     """启动时只读核对迁移版本，数据库结构变更必须在部署步骤中完成。"""

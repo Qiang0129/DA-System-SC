@@ -51,7 +51,7 @@ def run_landmark_demo(data_path: str | Path, n_base=20, anchor=10, lambdas=(5,),
 
 def main():
     parser = argparse.ArgumentParser(description='Run the Python-converted OMELET landmark demo.')
-    parser.add_argument('--data', type=str, default=str(Path(__file__).resolve().parents[1] / 'data' / 'ionosphere_base_clustering.npz'))
+    parser.add_argument('--data', type=str, default=str(Path(__file__).resolve().parents[1] / 'tests' / 'fixtures' / 'ionosphere_base_clustering.npz'))
     parser.add_argument('--n-base', type=int, default=20)
     parser.add_argument('--anchor', type=int, default=10)
     parser.add_argument('--runs', type=int, default=1)

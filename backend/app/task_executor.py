@@ -1,3 +1,8 @@
+"""数据库驱动的单任务执行调度器。
+
+执行器只负责领取、监控和持久化；算法计算在独立子进程中完成，避免阻塞 Web 服务进程。
+"""
+
 from __future__ import annotations
 
 import json
@@ -203,6 +208,7 @@ class TaskExecutionManager:
                     pass
 
     def _recover_interrupted_tasks(self) -> None:
+        """只回收心跳超时的运行任务，仍由其他 worker 持有租约的任务保持不动。"""
         settings = get_settings()
         stale_before = _now() - timedelta(seconds=float(settings.task_heartbeat_timeout_seconds))
         with SessionLocal() as session:
@@ -244,7 +250,7 @@ class TaskExecutionManager:
                 session.commit()
 
     def _claim_next_task(self) -> dict[str, Any] | None:
-        """在事务内锁定候选任务，并用状态条件更新完成原子领取。"""
+        """锁定候选行后再按 queued 条件更新，确保多实例只能有一个领取成功。"""
         with SessionLocal() as session:
             task = session.scalar(
                 select(AnalysisTask)
@@ -328,6 +334,7 @@ class TaskExecutionManager:
             return payload
 
     def _execute_task(self, payload: dict[str, Any]) -> None:
+        """启动受控子进程，同时维护心跳、运行时上限和标准输出事件通道。"""
         task_id = int(payload["taskId"])
         user_id = int(payload["userId"])
         settings = get_settings()
@@ -523,6 +530,7 @@ class TaskExecutionManager:
             return True
 
     def _persist_progress(self, task_id: int, event: dict[str, Any]) -> None:
+        """仅当前 worker 可以推进任务进度，失去租约后的迟到事件直接忽略。"""
         with SessionLocal() as session:
             task = session.scalar(
                 select(AnalysisTask).where(
@@ -564,6 +572,7 @@ class TaskExecutionManager:
         temporary_dir: Path,
         manifest: dict[str, Any],
     ) -> None:
+        """在锁定任务行后完成目录切换和结果写入，首个成功结果一经提交便不可覆盖。"""
         if manifest.get("schemaVersion") != 1:
             raise ValueError("不支持的任务结果版本")
         artifacts = manifest.get("artifacts")

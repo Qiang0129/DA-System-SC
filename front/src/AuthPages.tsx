@@ -10,6 +10,7 @@ import {
 } from './api/auth';
 import type { TurnstileAction } from './api/auth';
 import { TURNSTILE_SITE_KEY } from './api/config';
+import { SOFTWARE_SHORT_NAME } from './appMeta';
 import { TurnstileWidget, type TurnstileWidgetHandle } from './TurnstileWidget';
 
 const AUTH_SUBMIT_FEEDBACK_MS = 260;
@@ -206,7 +207,7 @@ function LoginCard({
   return (
     <div className="auth-card">
       <h1 className="auth-card-title">登录</h1>
-      <p className="auth-card-subtitle">登录到 OMELET Lab</p>
+      <p className="auth-card-subtitle">登录到 {SOFTWARE_SHORT_NAME}</p>
       <form
         className="auth-form"
         noValidate
@@ -403,7 +404,7 @@ function RegisterCard({
   return (
     <div className="auth-card">
       <h1 className="auth-card-title">注册</h1>
-      <p className="auth-card-subtitle">创建 OMELET Lab 账号</p>
+      <p className="auth-card-subtitle">创建 {SOFTWARE_SHORT_NAME} 账号</p>
       <form
         className="auth-form"
         noValidate

@@ -155,7 +155,7 @@ describe('LandingPage', () => {
       />,
     );
 
-    expect(screen.getByLabelText('当前版本 v1.0.0')).toHaveTextContent('v1.0.0');
+    expect(screen.getByLabelText('当前版本 V1.0')).toHaveTextContent('V1.0');
     expect(screen.queryByText('新材料聚类分析')).not.toBeInTheDocument();
     expect(container.querySelector('.landing-topbar button')).not.toBeInTheDocument();
   });

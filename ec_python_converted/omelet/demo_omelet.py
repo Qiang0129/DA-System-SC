@@ -51,7 +51,7 @@ def run_demo(data_path: str | Path, n_base=20, lambdas=(5,), gammas=(5,), sigmas
 
 def main():
     parser = argparse.ArgumentParser(description='Run the Python-converted OMELET demo.')
-    parser.add_argument('--data', type=str, default=str(Path(__file__).resolve().parents[1] / 'data' / 'ionosphere_base_clustering.npz'))
+    parser.add_argument('--data', type=str, default=str(Path(__file__).resolve().parents[1] / 'tests' / 'fixtures' / 'ionosphere_base_clustering.npz'))
     parser.add_argument('--n-base', type=int, default=20)
     parser.add_argument('--runs', type=int, default=1, help='Use 10 to mimic the original MATLAB demo.')
     parser.add_argument('--lambda-values', type=float, nargs='+', default=[5.0])

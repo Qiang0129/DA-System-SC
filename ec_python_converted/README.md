@@ -7,7 +7,7 @@
 - `omelet/`: Python 算法包。
 - `demo_OMELET.py`: 对应原始 `demo_OMELET.m` 的普通版本入口。
 - `OMELET_SV.py`: 对应原始 `OMELET_SV.m` 的 landmark/large-scale 版本入口。
-- `data/ionosphere_base_clustering.npz`: Python 示例数据；同时保留 `.mat` 版本并可由 `scipy.io.loadmat` 读取。
+- `tests/fixtures/ionosphere_base_clustering.npz`：仅供算法回归和本地开发使用的测试夹具；同时保留 `.mat` 版本。
 - `original_matlab_reference/`: 原始 MATLAB 文件备份，便于核对。
 
 ## 安装依赖
@@ -17,6 +17,8 @@ pip install -r requirements-lock.txt
 ```
 
 ## 快速运行测试
+
+测试夹具不会进入生产路由，也不纳入软著源码文档。
 
 ```bash
 python demo_OMELET.py --runs 1 --lambda-values 5 --gamma-values 5 --sigma-powers 0

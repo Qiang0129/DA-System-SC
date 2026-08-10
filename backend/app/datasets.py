@@ -68,6 +68,7 @@ class StagedUpload:
     file_hash: str
 
     def cleanup(self) -> None:
+        # 临时文件不属于数据库事务；无论解析或提交在哪一步失败，都必须单独清理。
         try:
             self.path.unlink(missing_ok=True)
         except OSError:
@@ -190,6 +191,7 @@ def _visible_mat_variables(mat: dict) -> dict:
 
 
 def _validate_loaded_mat(mat: dict, limits: MatLimits) -> None:
+    """在子进程内完成结构校验，避免畸形数组进入主进程和数据库事务。"""
     variables = _visible_mat_variables(mat)
     if not variables:
         raise MatValidationError(".mat 文件不包含可用变量")
@@ -296,6 +298,7 @@ def _controlled_parse_mat_file(
     include_mat: bool = False,
     limits: MatLimits | None = None,
 ) -> tuple[dict, dict | None]:
+    """以受控 spawn 子进程解析 MAT 文件，并由父进程负责超时和资源回收。"""
     limits = limits or _mat_limits()
     try:
         file_size = source_path.stat().st_size
@@ -651,6 +654,7 @@ def _catalog_item(
 
 
 async def _stage_upload(file: UploadFile) -> StagedUpload:
+    """先分块写入临时文件并校验大小，解析和正式落盘阶段不再持有完整文件字节。"""
     filename = file.filename or ""
     if not filename:
         raise HTTPException(400, "未选择文件")
@@ -740,6 +744,7 @@ def _file_sha256(path: Path) -> str:
 
 
 def _save_staged_upload(user_id: int, staged: StagedUpload, filename: str | None = None) -> tuple[str, Path]:
+    """通过同目录临时文件完成原子落盘，避免数据库记录指向未写完的文件。"""
     filename = filename or staged.filename
     storage_dir = _storage_directory(user_id)
     storage_dir.mkdir(parents=True, exist_ok=True)
@@ -793,6 +798,7 @@ def _build_appended_mat_file(
     output_path: Path,
     limits: MatLimits,
 ) -> dict:
+    """在独立输出文件中合并矩阵；原版本只有在数据库提交成功后才进入清理队列。"""
     current_parsed, current_mat = _controlled_parse_mat_file(
         current_path,
         current_filename,
@@ -896,6 +902,7 @@ def _ensure_quality_records(session: Session, datasets: list[Dataset]) -> None:
 
 
 def _delete_datasets(session: Session, datasets: list[Dataset]) -> set[tuple[str, Path]]:
+    """删除前检查正式任务引用，并把所有版本文件登记到事务性清理队列。"""
     dataset_ids = [dataset.id for dataset in datasets]
     task_count = session.scalar(
         select(func.count(AnalysisTask.id)).where(AnalysisTask.dataset_id.in_(dataset_ids)),
@@ -1013,6 +1020,7 @@ async def upload_dataset(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
+    """上传、解析、落盘和数据库写入构成一个业务事务，失败时同时清理两侧状态。"""
     staged: StagedUpload | None = None
     storage_path: Path | None = None
     try:
@@ -1065,6 +1073,7 @@ async def replace_dataset_file(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
+    """保存旧版本快照后切换文件引用，提交失败时继续保留当前可用版本。"""
     dataset = _get_user_dataset(session, dataset_id, user)
     staged: StagedUpload | None = None
     storage_path: Path | None = None
@@ -1125,6 +1134,7 @@ async def append_dataset_file(
     user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
+    """校验新旧矩阵结构后生成完整新版本，不直接修改正在使用的原文件。"""
     dataset = _get_user_dataset(session, dataset_id, user)
     staged: StagedUpload | None = None
     output_staged: StagedUpload | None = None
@@ -1322,31 +1332,6 @@ def delete_dataset(
     cleanup_paths = _delete_datasets(session, [dataset])
     process_pending_cleanup_jobs(limit=max(20, len(cleanup_paths)), bind=session.get_bind())
     return MessageResponse(message="数据集已删除，相关文件已进入清理流程")
-
-
-@router.get("/example-mat")
-def read_example_mat(user: User = Depends(get_current_user)):
-    if get_settings().app_env.strip().lower() == "production":
-        raise HTTPException(404, "示例数据接口仅在开发环境启用")
-
-    mat_path = (
-        Path(__file__).parent.parent.parent
-        / "ec_python_converted"
-        / "data"
-        / "ionosphere_base_clustering.mat"
-    )
-
-    if not mat_path.exists():
-        raise HTTPException(404, ".mat file not found")
-
-    parsed, _ = _controlled_parse_mat_file(mat_path, mat_path.name)
-
-    return {
-        "variables": parsed["variables"],
-        "sampleCount": parsed["sampleCount"],
-        "baseCount": parsed["baseCount"],
-        "hasLabels": parsed["hasLabels"],
-    }
 
 
 @router.post("/parse", response_model=DatasetParseResponse)

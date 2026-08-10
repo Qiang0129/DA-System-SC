@@ -1,3 +1,8 @@
+"""单个分析任务的子进程入口。
+
+该模块把平台任务参数转换为算法调用，并把数值结果整理为可校验、可下载的标准产物。
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -206,6 +211,7 @@ def _write_artifacts(
     representative_index: int,
     ground_truth: np.ndarray,
 ) -> dict[str, str]:
+    """同时保存机器可复用矩阵和用户可直接查看的 CSV，清单只记录相对文件名。"""
     representative = run_results[representative_index]
     labels = np.stack([result["labels"] for result in run_results])
     np.savez_compressed(output_dir / "labels.npz", labels=labels, ground_truth=ground_truth)
@@ -229,6 +235,7 @@ def _write_artifacts(
 
 
 def execute(job_path: Path) -> None:
+    """读取执行器生成的任务快照，完成计算后以 manifest 作为唯一完成信号。"""
     job = json.loads(job_path.read_text(encoding="utf-8"))
     _EVENT_CONTEXT.clear()
     _EVENT_CONTEXT.update(
@@ -246,6 +253,7 @@ def execute(job_path: Path) -> None:
         emit(event_type, **event)
 
     params = job["params"]
+    # 平台只向算法层传递已归一化参数；算法实现不接触数据库、用户目录或认证上下文。
     result = run_analysis(
         job["datasetPath"],
         mode=job["mode"],

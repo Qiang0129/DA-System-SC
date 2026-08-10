@@ -30,6 +30,7 @@ import {
 import { MathFormula } from '../../components/MathFormula';
 import { SelectField } from '../../components/SelectField';
 import { createTaskExport, downloadProtectedFile, fetchTaskExports } from '../../api/results';
+import { SOFTWARE_SHORT_NAME } from '../../appMeta';
 import { formatLocalDateTime } from '../../utils/time';
 import {
   WorkbenchMetricStrip,
@@ -1020,7 +1021,7 @@ export function ReportResultPage({ resource }: { resource: TaskResultResource })
             )}
           />
           <article className="report-document result-report-document">
-            <header><span>OMELET LAB · ANALYSIS REPORT</span><strong>{title || '未命名报告'}</strong><small>任务 #{task.id} · {task.finishedAt ? formatLocalDateTime(task.finishedAt) : '未完成'}</small></header>
+            <header><span>{SOFTWARE_SHORT_NAME} · 分析报告</span><strong>{title || '未命名报告'}</strong><small>任务 #{task.id} · {task.finishedAt ? formatLocalDateTime(task.finishedAt) : '未完成'}</small></header>
             {sections.includes('summary') ? (
               <ReportPreviewSection section="summary" title="任务摘要" meta={reportSectionMeta.summary} expanded={expandedSections.includes('summary')} onToggle={togglePreviewSection}>
                 <div className="report-document-summary"><div><span>数据集</span><strong>{task.datasetName}</strong></div><div><span>算法</span><strong>{task.mode}</strong></div><div><span>样本</span><strong>{result.preview.summary.sampleCount}</strong></div><div><span>类别</span><strong>{result.preview.summary.classCount}</strong></div><div><span>基础聚类</span><strong>{result.preview.summary.baseClusterCount}</strong></div><div><span>耗时</span><strong>{formatNumber(result.runtimeSeconds, 2)} s</strong></div></div>

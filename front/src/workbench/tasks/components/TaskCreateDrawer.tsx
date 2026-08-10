@@ -200,7 +200,7 @@ export function TaskCreateDrawer({
             <>
               <label className="task-form-field">
                 <span>任务名称</span>
-                <input value={name} onChange={(event) => setName(event.target.value)} placeholder="例如 Ionosphere OMELET-SV 任务" />
+                <input value={name} onChange={(event) => setName(event.target.value)} placeholder="请输入便于识别的任务名称" />
               </label>
 
               <SelectField

@@ -17,7 +17,11 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { apiJson, DATASET_UPLOAD_TIMEOUT_MS } from './api/client';
+/**
+ * 数据管理页面维护数据集目录与当前选中项，上传、追加、重命名和删除都通过后端接口完成。
+ * 页面只负责交互状态和展示格式化，版本、质量、任务引用和文件生命周期由后端决定。
+ */
+import { apiBlob, apiJson, DATASET_UPLOAD_TIMEOUT_MS } from './api/client';
 import { SelectField } from './components/SelectField';
 import { formatLocalDateTime } from './utils/time';
 
@@ -1151,6 +1155,7 @@ export function DatasetManagementPage() {
     setUploadError(null);
 
     try {
+      // 先由后端分块暂存并校验文件，前端不读取文件内容，避免重复占用浏览器内存。
       const formData = new FormData();
       formData.append('file', file);
 
@@ -1180,12 +1185,21 @@ export function DatasetManagementPage() {
     }
   }
 
-  function handleExport(dataset: DatasetCatalogItem) {
-    const blob = new Blob([JSON.stringify(dataset, null, 2)], { type: 'application/json' });
+  async function handleExport(dataset: DatasetCatalogItem) {
+    // 导出必须由后端读取真实数据文件并生成 ZIP，目录摘要不能替代原始数据交付物。
+    const blob = await apiBlob('/datasets/export', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ datasetIds: [Number(dataset.id)] }),
+      auth: true,
+      unauthenticatedMessage: '请先登录后导出数据集',
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${dataset.name}.json`;
+    a.download = `${dataset.name}-${dataset.id}.zip`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -1257,7 +1271,7 @@ export function DatasetManagementPage() {
         <DatasetDetailView
           dataset={activeDataset}
           onBack={() => setSelectedId(null)}
-          onExport={() => handleExport(activeDataset)}
+          onExport={() => void handleExport(activeDataset)}
           onRename={() => openRenameDialog(activeDataset)}
           onDelete={() => openDeleteDialog(activeDataset)}
         />

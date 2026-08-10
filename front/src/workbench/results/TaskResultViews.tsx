@@ -1,3 +1,7 @@
+/**
+ * 结果页面只消费任务结果接口返回的 envelope，不在前端生成演示指标、矩阵或运行日志。
+ * 状态页处理未完成任务，完成后的 section 再交给对应的真实结果视图。
+ */
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -471,6 +475,7 @@ export function TaskResultViews({ section, resource }: Props) {
     return <ResultState resource={resource} />;
   }
 
+  // 路由 section 是展示意图，数据来源始终是同一个后端结果资源，避免各页面各自拼装假数据。
   if (section === 'analysis') return <AnalysisOverviewPage resource={resource} />;
   if (section === 'ca-matrix') return <CaResultPage resource={resource} />;
   if (section === 'kernel-config') return <KernelResultPage resource={resource} />;
