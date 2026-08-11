@@ -14,6 +14,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Mm, Pt, RGBColor
 from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfbase import pdfmetrics
@@ -263,6 +268,125 @@ def _write_submission_pdf(output_path: Path, manifest: dict, files_by_path: dict
     return 60, max(first_lines_per_page, last_lines_per_page)
 
 
+def _set_run_font(run, size: float, color: str, *, bold: bool = False) -> None:
+    """显式设置中西文字体，避免不同 Word 环境把代码替换为不兼容的主题字体。"""
+    run.font.name = "FangSong"
+    run._element.rPr.rFonts.set(qn("w:ascii"), "Consolas")
+    run._element.rPr.rFonts.set(qn("w:hAnsi"), "Consolas")
+    run._element.rPr.rFonts.set(qn("w:eastAsia"), "FangSong")
+    run.font.size = Pt(size)
+    run.font.color.rgb = RGBColor.from_string(color)
+    run.bold = bold
+
+
+def _add_page_field(paragraph) -> None:
+    """插入 PAGE 域；Word 和 PDF 导出时会根据实际分页更新页码。"""
+    field = OxmlElement("w:fldSimple")
+    field.set(qn("w:instr"), "PAGE")
+    run = OxmlElement("w:r")
+    text = OxmlElement("w:t")
+    text.text = "1"
+    run.append(text)
+    field.append(run)
+    paragraph._p.append(field)
+
+
+def _configure_submission_docx(doc: Document, manifest: dict) -> None:
+    """配置软著源码 Word 的 A4 代码页，不使用封面以保证首尾各 30 页的固定结构。"""
+    section = doc.sections[0]
+    section.page_width = Mm(210)
+    section.page_height = Mm(297)
+    section.top_margin = Mm(15)
+    section.bottom_margin = Mm(14)
+    section.left_margin = Mm(16)
+    section.right_margin = Mm(16)
+    section.header_distance = Mm(7)
+    section.footer_distance = Mm(7)
+
+    normal = doc.styles["Normal"]
+    normal.font.name = "FangSong"
+    normal._element.rPr.rFonts.set(qn("w:eastAsia"), "FangSong")
+    normal.font.size = Pt(7.1)
+    normal.paragraph_format.space_before = Pt(0)
+    normal.paragraph_format.space_after = Pt(0)
+    normal.paragraph_format.line_spacing = Pt(8.5)
+
+    header = section.header
+    header.is_linked_to_previous = False
+    header_paragraph = header.paragraphs[0]
+    header_paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    header_paragraph.paragraph_format.space_after = Pt(1)
+    header_paragraph.paragraph_format.tab_stops.add_tab_stop(Mm(176), WD_ALIGN_PARAGRAPH.RIGHT)
+    _set_run_font(header_paragraph.add_run(f"{manifest['softwareName']} {manifest['version']}"), 8.2, "14202B")
+    header_paragraph.add_run("\t第 ")
+    _add_page_field(header_paragraph)
+    _set_run_font(header_paragraph.add_run(" 页"), 8.2, "5D6873")
+
+    footer = section.footer
+    footer.is_linked_to_previous = False
+    footer_paragraph = footer.paragraphs[0]
+    footer_paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    footer_paragraph.paragraph_format.space_before = Pt(0)
+    footer_paragraph.paragraph_format.space_after = Pt(0)
+    _set_run_font(footer_paragraph.add_run("软著源码材料 - 由 source-manifest.json 可复现生成"), 6.2, "68737D")
+
+
+def _add_submission_code_line(doc: Document, line_number: int | None, code_line: str) -> None:
+    paragraph = doc.add_paragraph()
+    paragraph.paragraph_format.space_before = Pt(0)
+    paragraph.paragraph_format.space_after = Pt(0)
+    paragraph.paragraph_format.line_spacing = Pt(8.5)
+    paragraph.paragraph_format.left_indent = Mm(0)
+    paragraph.paragraph_format.tab_stops.add_tab_stop(Mm(8), WD_ALIGN_PARAGRAPH.RIGHT)
+    if line_number is not None:
+        _set_run_font(paragraph.add_run(f"{line_number}\t"), 7.1, "8A939D")
+    else:
+        _set_run_font(paragraph.add_run("\t"), 7.1, "8A939D")
+    _set_run_font(paragraph.add_run(code_line), 7.1, "20242B")
+
+
+def _write_submission_docx(output_path: Path, manifest: dict, files_by_path: dict[str, SourceFile]) -> int:
+    """以与 PDF 相同的源码页切分规则生成可编辑的 60 页 Word 摘录。"""
+    first_files = [files_by_path[path] for path in manifest["submissionFirst"]]
+    last_files = [files_by_path[path] for path in manifest["submissionLast"]]
+    first_lines = _visual_lines(first_files)
+    last_lines = _visual_lines(last_files)
+    first_lines_per_page = max(50, math.ceil(len(first_lines) / 30))
+    last_lines_per_page = max(50, math.ceil(len(last_lines) / 30))
+
+    doc = Document()
+    _configure_submission_docx(doc, manifest)
+    # Document() 默认附带一个空段落，源码首页不能额外占用一行。
+    if doc.paragraphs:
+        initial_paragraph = doc.paragraphs[0]
+        initial_paragraph._element.getparent().remove(initial_paragraph._element)
+
+    page_groups = [
+        (first_lines, first_lines_per_page, 30),
+        (last_lines, last_lines_per_page, 30),
+    ]
+    page_index = 0
+    for lines, lines_per_page, page_count in page_groups:
+        for local_page in range(page_count):
+            chunk = lines[local_page * lines_per_page:(local_page + 1) * lines_per_page]
+            current_path = next((item[0] for item in chunk if item[0]), "")
+            path_paragraph = doc.add_paragraph()
+            path_paragraph.paragraph_format.space_before = Pt(0)
+            path_paragraph.paragraph_format.space_after = Pt(1)
+            _set_run_font(path_paragraph.add_run(current_path), 6.6, "4D5A66")
+            for _path, line_number, code_line in chunk:
+                _add_submission_code_line(doc, line_number, code_line)
+            page_index += 1
+            if page_index < 60:
+                doc.add_page_break()
+
+    doc.core_properties.title = f"{manifest['softwareName']} {manifest['version']} 软著源码提交摘录"
+    doc.core_properties.subject = "软件著作权登记源码材料"
+    doc.core_properties.author = manifest["softwareShortName"]
+    doc.save(output_path)
+    return page_index
+
+
 def _write_file_list(output_path: Path, manifest: dict, files: list[SourceFile], revision: str) -> None:
     lines = [
         f"软件名称：{manifest['softwareName']}",
@@ -326,6 +450,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument(
+        "--submission-docx-only",
+        action="store_true",
+        help="只生成可编辑的 60 页源码提交摘录 DOCX，不改写已打开的 PDF 或 ZIP。",
+    )
     args = parser.parse_args()
 
     manifest_path = args.manifest.resolve()
@@ -338,19 +467,30 @@ def main() -> None:
     if missing:
         raise FileNotFoundError(f"提交摘录文件不在源码清单中: {', '.join(missing)}")
 
-    _register_fonts()
     revision = _git_revision()
     full_pdf = output_dir / "新材料数据分析系统-V1.0-完整源码.pdf"
     submission_pdf = output_dir / "新材料数据分析系统-V1.0-软著源码提交摘录.pdf"
+    submission_docx = output_dir / "新材料数据分析系统-V1.0-软著源码提交摘录.docx"
     file_list = output_dir / "源码文件清单.txt"
     exclusion_list = output_dir / "源码排除项清单.txt"
     verification = output_dir / "源码材料校验报告.txt"
     source_zip = output_dir / "新材料数据分析系统-V1.0-原创平台源码包.zip"
 
+    if args.submission_docx_only:
+        submission_docx_pages = _write_submission_docx(submission_docx, manifest, files_by_path)
+        print(json.dumps({
+            "files": len(files),
+            "submissionDocxPages": submission_docx_pages,
+            "output": str(submission_docx),
+        }, ensure_ascii=False, indent=2))
+        return
+
+    _register_fonts()
     _write_file_list(file_list, manifest, files, revision)
     _write_exclusion_list(exclusion_list, manifest)
     full_pages = _write_full_pdf(full_pdf, manifest, files)
     _, submission_lpp = _write_submission_pdf(submission_pdf, manifest, files_by_path)
+    submission_docx_pages = _write_submission_docx(submission_docx, manifest, files_by_path)
     _write_verification(verification, files, full_pages, submission_lpp)
     _write_source_zip(source_zip, manifest_path, files, [file_list, exclusion_list, verification])
 
@@ -358,6 +498,7 @@ def main() -> None:
         "files": len(files),
         "fullPages": full_pages,
         "submissionPages": 60,
+        "submissionDocxPages": submission_docx_pages,
         "submissionLinesPerPage": submission_lpp,
         "outputDir": str(output_dir),
     }, ensure_ascii=False, indent=2))
