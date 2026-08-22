@@ -11,7 +11,7 @@ EXPECTED_SCIENTIFIC_VERSIONS = {
     "numpy": "1.26.4",
     "scipy": "1.13.1",
     "scikit-learn": "1.4.2",
-    "threadpoolctl": "2.2.0",
+    "threadpoolctl": "3.6.0",
 }
 
 

@@ -69,6 +69,20 @@ def enable_turnstile(monkeypatch, payload: dict | None = None, error: Exception 
     monkeypatch.setattr(turnstile.httpx, "Client", FakeTurnstileClient)
 
 
+def enable_email_verification(monkeypatch):
+    from app import auth
+
+    base_settings = auth.get_settings()
+
+    class EmailRequiredSettings:
+        email_verification_required = True
+
+        def __getattr__(self, name: str):
+            return getattr(base_settings, name)
+
+    monkeypatch.setattr(auth, "get_settings", lambda: EmailRequiredSettings())
+
+
 def make_invalid_turnstile_pass(payload: dict) -> str:
     from app import security
 
@@ -307,7 +321,20 @@ def test_email_verification_register_flow_and_login_by_email(monkeypatch):
     assert duplicate_code_response.status_code == 409
 
 
+def test_email_code_endpoint_is_hidden_when_verification_is_disabled():
+    client = make_test_client()
+
+    response = client.post(
+        "/api/auth/register/email-code",
+        json={"email": "alice@example.com"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "当前部署未启用邮箱验证码"
+
+
 def test_turnstile_secret_requires_token(monkeypatch):
+    enable_email_verification(monkeypatch)
     enable_turnstile(monkeypatch)
     client = make_test_client()
 
@@ -326,6 +353,7 @@ def test_turnstile_secret_requires_token(monkeypatch):
 def test_turnstile_success_allows_email_code_send(monkeypatch):
     from app import email_verification
 
+    enable_email_verification(monkeypatch)
     enable_turnstile(monkeypatch, {"success": True, "action": "register"})
     sent_codes: list[tuple[str, str]] = []
     monkeypatch.setattr(email_verification, "generate_email_code", lambda: "123456")
@@ -430,6 +458,8 @@ def test_login_turnstile_pass_can_cover_login_and_register_email_code(monkeypatc
         },
     )
     assert register_response.status_code == 200
+
+    enable_email_verification(monkeypatch)
 
     pass_response = client.post(
         "/api/auth/turnstile-pass",
@@ -538,6 +568,7 @@ def test_turnstile_pass_rejects_expired_invalid_and_wrong_type_tokens(monkeypatc
 
 
 def test_turnstile_rejects_failed_response(monkeypatch):
+    enable_email_verification(monkeypatch)
     enable_turnstile(monkeypatch, {"success": False, "action": "register"})
     client = make_test_client()
 
@@ -554,6 +585,7 @@ def test_turnstile_rejects_failed_response(monkeypatch):
 
 
 def test_turnstile_rejects_action_mismatch(monkeypatch):
+    enable_email_verification(monkeypatch)
     enable_turnstile(monkeypatch, {"success": True, "action": "login"})
     client = make_test_client()
 
@@ -570,6 +602,7 @@ def test_turnstile_rejects_action_mismatch(monkeypatch):
 
 
 def test_turnstile_service_error_fails_closed(monkeypatch):
+    enable_email_verification(monkeypatch)
     enable_turnstile(monkeypatch, error=httpx.ConnectError("turnstile unavailable"))
     client = make_test_client()
 

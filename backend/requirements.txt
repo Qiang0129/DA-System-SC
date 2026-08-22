@@ -6,10 +6,11 @@ pymysql==1.1.1
 pydantic-settings==2.14.1
 python-jose[cryptography]==3.3.0
 python-dotenv==0.21.0
+python-multipart==0.0.32
 bcrypt==3.2.0
 pytest==7.4.4
 httpx==0.28.1
 numpy==1.26.4
 scipy==1.13.1
 scikit-learn==1.4.2
-threadpoolctl==2.2.0
+threadpoolctl==3.6.0

@@ -130,6 +130,12 @@ def send_register_email_code(
     request: Request,
     session: Session = Depends(get_session),
 ):
+    if not get_settings().email_verification_required:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="当前部署未启用邮箱验证码",
+        )
+
     verify_turnstile_access(payload.turnstile_token, payload.turnstile_pass_token, "register")
 
     email = normalize_email(payload.email)

@@ -12,12 +12,13 @@ type TestTurnstileApi = {
   remove: ReturnType<typeof vi.fn>;
 };
 
-async function loadAuthPages(siteKey = ''): Promise<AuthPagesModule> {
+async function loadAuthPages(siteKey = '', emailVerificationRequired = true): Promise<AuthPagesModule> {
   vi.resetModules();
   vi.doMock('./api/config', () => ({
     API_BASE_URL: '/api',
     BACKEND_ORIGIN: 'http://127.0.0.1:8000',
     TURNSTILE_SITE_KEY: siteKey,
+    EMAIL_VERIFICATION_REQUIRED: emailVerificationRequired,
   }));
   return import('./AuthPages');
 }
@@ -207,6 +208,44 @@ describe('AuthPages', () => {
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ email: 'bob@example.com', turnstile_token: null }),
+      }),
+    );
+  });
+
+  it('registers without an email code when email verification is disabled', async () => {
+    const { RegisterPage } = await loadAuthPages('', false);
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+    globalThis.fetch = vi.fn().mockResolvedValue(authSuccessResponse('public-user'));
+
+    render(
+      <RegisterPage
+        onSuccess={onSuccess}
+        onSwitch={() => undefined}
+        onBack={() => undefined}
+      />,
+    );
+
+    expect(screen.queryByLabelText('邮箱验证码')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '发送验证码' })).not.toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('用户名'), 'public-user');
+    await user.type(screen.getByLabelText('邮箱'), 'public@example.com');
+    await user.type(screen.getByLabelText('密码'), 'secret123');
+    await user.type(screen.getByLabelText('确认密码'), 'secret123');
+    await user.click(screen.getByRole('button', { name: '注册' }));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringMatching(/\/api\/auth\/register$/),
+      expect.objectContaining({
+        body: JSON.stringify({
+          username: 'public-user',
+          email: 'public@example.com',
+          password: 'secret123',
+          confirm_password: 'secret123',
+          email_code: null,
+        }),
       }),
     );
   });

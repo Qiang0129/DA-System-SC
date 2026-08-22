@@ -2,4 +2,4 @@ joblib==1.5.3
 numpy==1.26.4
 scikit-learn==1.4.2
 scipy==1.13.1
-threadpoolctl==2.2.0
+threadpoolctl==3.6.0

@@ -136,7 +136,7 @@ export function register(
   email: string,
   password: string,
   confirmPassword: string,
-  emailCode: string,
+  emailCode: string | null,
 ) {
   return requestJson<AuthResponse>('/auth/register', {
     method: 'POST',

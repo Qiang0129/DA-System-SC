@@ -34,7 +34,12 @@ tmp/
 *.env
 !*.env.example
 !*.env.sample
+.env.runtime
 backend/config/database.env
+
+# Docker 生产数据和本机备份不得进入源码仓库
+data/
+backups/
 
 # Office 临时锁文件和本地工具目录
 ~$*

@@ -9,7 +9,7 @@ import {
   sendRegisterEmailCode,
 } from './api/auth';
 import type { TurnstileAction } from './api/auth';
-import { TURNSTILE_SITE_KEY } from './api/config';
+import { EMAIL_VERIFICATION_REQUIRED, TURNSTILE_SITE_KEY } from './api/config';
 import { SOFTWARE_SHORT_NAME } from './appMeta';
 import { TurnstileWidget, type TurnstileWidgetHandle } from './TurnstileWidget';
 
@@ -23,6 +23,7 @@ interface AuthProps {
   hasTurnstilePass?: boolean;
   turnstilePassToken?: string;
   onTurnstileVerify?: (token: string, action: TurnstileAction) => Promise<void>;
+  emailVerificationRequired?: boolean;
 }
 
 type TurnstilePassState = {
@@ -277,6 +278,7 @@ function RegisterCard({
   hasTurnstilePass = false,
   turnstilePassToken = '',
   onTurnstileVerify,
+  emailVerificationRequired = EMAIL_VERIFICATION_REQUIRED,
 }: AuthProps) {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -382,14 +384,20 @@ function RegisterCard({
       return;
     }
 
-    if (!emailCode.trim()) {
+    if (emailVerificationRequired && !emailCode.trim()) {
       setError('请填写邮箱验证码');
       return;
     }
 
     setSubmitting(true);
     try {
-      const auth = await register(username.trim(), email.trim(), password, confirm, emailCode.trim());
+      const auth = await register(
+        username.trim(),
+        email.trim(),
+        password,
+        confirm,
+        emailVerificationRequired ? emailCode.trim() : null,
+      );
       saveAuthSession(auth);
       await waitForAuthSubmitFeedback(startedAt);
       onSuccess();
@@ -460,32 +468,34 @@ function RegisterCard({
           onVerify={handleTurnstileVerify}
           onError={handleTurnstileError}
         />
-        <div className="auth-code-row">
-          <AuthField
-            id="register-email-code"
-            name="emailCode"
-            label="邮箱验证码"
-            type="text"
-            value={emailCode}
-            onChange={setEmailCode}
-            autoComplete="one-time-code"
-            placeholder="请输入验证码"
-          />
-          <button
-            type="button"
-            className="auth-code-button"
-            disabled={sendingEmailCode || emailCodeCooldown > 0}
-            aria-busy={sendingEmailCode}
-            onClick={handleSendEmailCode}
-          >
-            {sendingEmailCode ? (
-              <LoaderCircle className="auth-submit-spinner" size={15} aria-hidden="true" />
-            ) : (
-              <MailCheck size={15} aria-hidden="true" />
-            )}
-            {emailCodeCooldown > 0 ? `${emailCodeCooldown}s` : '发送验证码'}
-          </button>
-        </div>
+        {emailVerificationRequired ? (
+          <div className="auth-code-row">
+            <AuthField
+              id="register-email-code"
+              name="emailCode"
+              label="邮箱验证码"
+              type="text"
+              value={emailCode}
+              onChange={setEmailCode}
+              autoComplete="one-time-code"
+              placeholder="请输入验证码"
+            />
+            <button
+              type="button"
+              className="auth-code-button"
+              disabled={sendingEmailCode || emailCodeCooldown > 0}
+              aria-busy={sendingEmailCode}
+              onClick={handleSendEmailCode}
+            >
+              {sendingEmailCode ? (
+                <LoaderCircle className="auth-submit-spinner" size={15} aria-hidden="true" />
+              ) : (
+                <MailCheck size={15} aria-hidden="true" />
+              )}
+              {emailCodeCooldown > 0 ? `${emailCodeCooldown}s` : '发送验证码'}
+            </button>
+          </div>
+        ) : null}
         {notice ? <p className="auth-notice" role="status">{notice}</p> : null}
         {error ? <p className="auth-error" role="alert">{error}</p> : null}
         <button

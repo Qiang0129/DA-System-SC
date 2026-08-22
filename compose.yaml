@@ -1,0 +1,123 @@
+name: da-system-sc
+
+services:
+  db:
+    image: mysql:8.4.11@sha256:b3b90af2a6552ae30c266fdb7d5dd55f3afb72404bb78d37fe8a23eb857fd3fb
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-soft_web}
+      MYSQL_USER: ${DB_USER:-soft_web}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+    networks:
+      - app
+    logging: &default-logging
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  migrate:
+    image: da-system-sc-backend:${APP_IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: deployment/backend.Dockerfile
+    restart: "no"
+    environment: &backend-environment
+      APP_ENV: production
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: ${DB_NAME:-soft_web}
+      DB_USER: ${DB_USER:-soft_web}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      DATASET_STORAGE_DIR: /data/datasets
+      RESULT_STORAGE_DIR: /data/results
+      TASK_EXECUTOR_ENABLED: "true"
+      EMAIL_VERIFICATION_REQUIRED: "false"
+      TURNSTILE_SECRET_KEY: ""
+      CORS_ORIGINS: https://da.scu-gpt.me
+      TZ: Asia/Shanghai
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app
+
+  backend:
+    image: da-system-sc-backend:${APP_IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: deployment/backend.Dockerfile
+    restart: unless-stopped
+    environment: *backend-environment
+    volumes:
+      - ./data/storage:/data
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - app
+    logging: *default-logging
+
+  web:
+    image: da-system-sc-web:${APP_IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: deployment/web.Dockerfile
+      args:
+        VITE_TURNSTILE_SITE_KEY: ""
+        VITE_EMAIL_VERIFICATION_REQUIRED: "false"
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - edge
+      - app
+    logging: *default-logging
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.8.2-amd64@sha256:de55830499e9adb1c580f7b5cbbdef86a3ff1715fb3ae6b3ff242f19de0afde8
+    restart: unless-stopped
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    command: ["tunnel", "--no-autoupdate", "run"]
+    depends_on:
+      web:
+        condition: service_healthy
+    networks:
+      - edge
+    logging: *default-logging
+
+volumes:
+  mysql_data:
+
+networks:
+  edge:
+  app:
+    internal: true

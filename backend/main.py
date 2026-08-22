@@ -29,7 +29,13 @@ def validate_startup_configuration(current_settings: Settings) -> None:
 
 validate_startup_configuration(settings)
 
-app = FastAPI(title=f"{SOFTWARE_NAME} API {SOFTWARE_VERSION}")
+production_mode = settings.app_env.strip().lower() == "production"
+app = FastAPI(
+    title=f"{SOFTWARE_NAME} API {SOFTWARE_VERSION}",
+    docs_url=None if production_mode else "/docs",
+    redoc_url=None if production_mode else "/redoc",
+    openapi_url=None if production_mode else "/openapi.json",
+)
 
 app.add_middleware(
     CORSMiddleware,
