@@ -13,7 +13,17 @@
    ./deployment/scripts/set-tunnel-token.sh
    ```
 
-4. 构建、迁移并启动：
+4. 配置 Turnstile 和邮箱验证：
+
+   ```bash
+   cp .env.security.example .env.security
+   chmod 600 .env.security
+   nano .env.security
+   ```
+
+   填写 `VITE_TURNSTILE_SITE_KEY`、`TURNSTILE_SECRET_KEY`、SMTP 账号、SMTP 授权码和发件人地址。保存后将 `EMAIL_VERIFICATION_REQUIRED` 保持为 `true`。
+
+5. 构建、迁移并启动：
 
    ```bash
    ./deployment/scripts/deploy.sh
@@ -25,7 +35,7 @@
    ./deployment/scripts/start-tunnel.sh
    ```
 
-5. 安装每日备份定时器与 Windows 登录常驻任务：
+6. 安装每日备份定时器与 Windows 登录常驻任务：
 
    ```bash
    sudo ./deployment/scripts/install-backup-timer.sh

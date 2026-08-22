@@ -46,9 +46,20 @@ services:
       DATASET_STORAGE_DIR: /data/datasets
       RESULT_STORAGE_DIR: /data/results
       TASK_EXECUTOR_ENABLED: "true"
-      EMAIL_VERIFICATION_REQUIRED: "false"
-      TURNSTILE_SECRET_KEY: ""
-      CORS_ORIGINS: https://da.scu-gpt.me
+      EMAIL_VERIFICATION_REQUIRED: ${EMAIL_VERIFICATION_REQUIRED:-false}
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+      TURNSTILE_VERIFY_URL: ${TURNSTILE_VERIFY_URL:-https://challenges.cloudflare.com/turnstile/v0/siteverify}
+      TURNSTILE_TIMEOUT_SECONDS: ${TURNSTILE_TIMEOUT_SECONDS:-5}
+      TURNSTILE_PASS_EXPIRE_MINUTES: ${TURNSTILE_PASS_EXPIRE_MINUTES:-5}
+      SMTP_HOST: ${SMTP_HOST:-smtp.qq.com}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-新材料数据分析系统}
+      SMTP_USE_SSL: ${SMTP_USE_SSL:-true}
+      SMTP_TIMEOUT_SECONDS: ${SMTP_TIMEOUT_SECONDS:-10}
+      CORS_ORIGINS: ${PUBLIC_ORIGIN:-https://da-system-sc.scuccs.me}
       TZ: Asia/Shanghai
     command: ["python", "-m", "alembic", "upgrade", "head"]
     depends_on:
@@ -85,8 +96,8 @@ services:
       context: .
       dockerfile: deployment/web.Dockerfile
       args:
-        VITE_TURNSTILE_SITE_KEY: ""
-        VITE_EMAIL_VERIFICATION_REQUIRED: "false"
+        VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY:-}
+        VITE_EMAIL_VERIFICATION_REQUIRED: ${EMAIL_VERIFICATION_REQUIRED:-false}
     restart: unless-stopped
     depends_on:
       backend:

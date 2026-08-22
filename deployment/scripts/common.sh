@@ -4,6 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 RUNTIME_FILE="${PROJECT_DIR}/.env.runtime"
+SECURITY_FILE="${PROJECT_DIR}/.env.security"
 COMPOSE_FILE="${PROJECT_DIR}/compose.yaml"
 
 die() {
@@ -18,6 +19,9 @@ require_command() {
 require_runtime_file() {
   [[ -f "${RUNTIME_FILE}" ]] || die "缺少 ${RUNTIME_FILE}，请先执行 deployment/scripts/init-runtime.sh"
   chmod 600 "${RUNTIME_FILE}"
+  if [[ -f "${SECURITY_FILE}" ]]; then
+    chmod 600 "${SECURITY_FILE}"
+  fi
 }
 
 load_runtime() {
@@ -26,6 +30,11 @@ load_runtime() {
   # 运行文件只允许 KEY=VALUE 格式，密钥由初始化脚本生成，不执行用户输入的 shell 片段。
   # shellcheck disable=SC1090
   source "${RUNTIME_FILE}"
+  if [[ -f "${SECURITY_FILE}" ]]; then
+    # 安全配置单独保存，后加载以覆盖同名默认项。
+    # shellcheck disable=SC1090
+    source "${SECURITY_FILE}"
+  fi
   set +a
 }
 
@@ -48,8 +57,12 @@ compose() {
   if [[ -z "${resolved_image_tag}" || "${resolved_image_tag}" == "local" ]]; then
     resolved_image_tag="$(git -C "${PROJECT_DIR}" rev-parse --short=12 HEAD 2>/dev/null || echo local)"
   fi
+  local env_files=(--env-file "${RUNTIME_FILE}")
+  if [[ -f "${SECURITY_FILE}" ]]; then
+    env_files+=(--env-file "${SECURITY_FILE}")
+  fi
   APP_IMAGE_TAG="${resolved_image_tag}" docker compose \
-    --env-file "${RUNTIME_FILE}" \
+    "${env_files[@]}" \
     -f "${COMPOSE_FILE}" \
     --project-directory "${PROJECT_DIR}" \
     "$@"
