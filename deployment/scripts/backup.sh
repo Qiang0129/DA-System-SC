@@ -8,6 +8,7 @@ source "${SCRIPT_DIR}/common.sh"
 require_command docker
 require_command tar
 validate_runtime false
+pin_running_image_tag
 
 backup_dir="${BACKUP_DIR:-/mnt/e/WSL-Backups/DA-System-SC}"
 timestamp="$(date +%Y%m%d-%H%M%S)"

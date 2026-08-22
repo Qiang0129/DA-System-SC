@@ -10,6 +10,7 @@ confirmation="${2:-}"
 [[ -f "${archive}" ]] || die "请提供可读取的备份归档路径"
 [[ "${confirmation}" == "--confirm-restore" ]] || die "恢复会覆盖数据库和 storage，请追加 --confirm-restore"
 validate_runtime false
+pin_running_image_tag
 
 if [[ -f "${archive}.sha256" ]]; then
   (cd "$(dirname "${archive}")" && sha256sum -c "$(basename "${archive}.sha256")")

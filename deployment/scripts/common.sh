@@ -55,6 +55,20 @@ compose() {
     "$@"
 }
 
+pin_running_image_tag() {
+  local image tag
+  image="$(docker ps \
+    --filter "label=com.docker.compose.project=da-system-sc" \
+    --filter "label=com.docker.compose.service=backend" \
+    --format '{{.Image}}' | head -n 1)"
+  if [[ "${image}" == da-system-sc-backend:* ]]; then
+    tag="${image#da-system-sc-backend:}"
+    if [[ -n "${tag}" ]]; then
+      export APP_IMAGE_TAG="${tag}"
+    fi
+  fi
+}
+
 wait_for_container_health() {
   local service="$1"
   local timeout_seconds="${2:-180}"
