@@ -19,6 +19,12 @@
    ./deployment/scripts/deploy.sh
    ```
 
+   如果本地栈已经运行，只需在写入 Token 后执行：
+
+   ```bash
+   ./deployment/scripts/start-tunnel.sh
+   ```
+
 5. 安装每日备份定时器与 Windows 登录常驻任务：
 
    ```bash
