@@ -10,7 +10,6 @@ import {
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import './landing.css';
 import { SOFTWARE_SHORT_NAME } from './appMeta';
-import sidebarBrandLogo from './images/Logo.svg';
 import { LandingPage } from './LandingPage';
 import { AuthFlipCard } from './AuthPages';
 import { AppBackground } from './AppBackground';
@@ -88,16 +87,6 @@ function Sidebar({
       />
       <aside className={`sidebar ${open ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-brand" title={SOFTWARE_SHORT_NAME}>
-          <span className="brand-logo" aria-hidden="true">
-            <img
-              className="sidebar-brand-logo-image"
-              src={sidebarBrandLogo}
-              width={30}
-              height={30}
-              alt=""
-              aria-hidden="true"
-            />
-          </span>
           <span className="brand-copy">
         <strong>{SOFTWARE_SHORT_NAME}</strong>
             <small>新材料聚类分析</small>

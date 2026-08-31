@@ -160,7 +160,7 @@ describe('LandingPage', () => {
     expect(container.querySelector('.landing-topbar button')).not.toBeInTheDocument();
   });
 
-  it('uses the local logo image in the topbar brand mark', () => {
+  it('keeps the topbar brand mark free of logo imagery', () => {
     const { container } = render(
       <LandingPage
         onLogin={() => undefined}
@@ -169,12 +169,9 @@ describe('LandingPage', () => {
       />,
     );
 
-    const brandLogo = container.querySelector('.landing-brand .brand-logo');
-    const logoImage = brandLogo?.querySelector<HTMLImageElement>('img.brand-logo-image');
-
-    expect(brandLogo?.querySelector('svg')).not.toBeInTheDocument();
-    expect(logoImage).not.toBeNull();
-    expect(decodeURI(logoImage?.getAttribute('src') ?? '')).toContain('Logo.svg');
+    expect(container.querySelector('.brand-logo')).toBeNull();
+    expect(container.querySelector('img.brand-logo-image')).toBeNull();
+    expect(container.querySelector('.landing-brand-copy')).not.toBeNull();
   });
 
   it('shows and copies the complete frontend access URL for the active endpoint', async () => {

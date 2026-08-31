@@ -89,27 +89,6 @@
   min-width: 0;
 }
 
-.landing-brand .brand-logo {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: 0 10px 24px -16px rgba(0, 98, 214, 0.8);
-}
-
-.brand-logo-image {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
-  object-position: center;
-  transform: scale(1.18);
-}
-
 .landing-brand-copy strong {
   display: block;
   /* 对齐 new-api：text-lg (18px) font-semibold */

@@ -49,19 +49,6 @@ describe('dashboard shell styles', () => {
     expect(getProperty(metricValueRule, 'font-weight')).toBe('800');
   });
 
-  it('clips the sidebar brand logo image to the rounded container', () => {
-    const brandLogoRule = getRule('.brand-logo');
-    const logoImageRule = getRule('.sidebar-brand-logo-image');
-
-    expect(getProperty(brandLogoRule, 'border-radius')).toBe('10px');
-    expect(getProperty(brandLogoRule, 'overflow')).toBe('hidden');
-    expect(getProperty(logoImageRule, 'width')).toBe('100%');
-    expect(getProperty(logoImageRule, 'height')).toBe('100%');
-    expect(getProperty(logoImageRule, 'display')).toBe('block');
-    expect(getProperty(logoImageRule, 'object-fit')).toBe('cover');
-    expect(getProperty(logoImageRule, 'object-position')).toBe('center');
-  });
-
   it('reserves independent rows for drawer tabs, scrolling content, and footer actions', () => {
     const drawerRule = getRule('.task-drawer-panel');
     const bodyRule = getRule('.task-drawer-body');
