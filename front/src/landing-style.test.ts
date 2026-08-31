@@ -61,20 +61,6 @@ function getReducedMotionBlock() {
 }
 
 describe('landing URL copy button styles', () => {
-  it('renders the topbar brand logo as a clipped local image', () => {
-    const brandLogoRule = getRule('.landing-brand .brand-logo');
-    const brandLogoImageRule = getRule('.brand-logo-image');
-
-    expect(getProperty(brandLogoRule, 'width')).toBe('32px');
-    expect(getProperty(brandLogoRule, 'height')).toBe('32px');
-    expect(getProperty(brandLogoRule, 'overflow')).toBe('hidden');
-    expect(getProperty(brandLogoImageRule, 'width')).toBe('100%');
-    expect(getProperty(brandLogoImageRule, 'height')).toBe('100%');
-    expect(getProperty(brandLogoImageRule, 'display')).toBe('block');
-    expect(getProperty(brandLogoImageRule, 'object-fit')).toBe('cover');
-    expect(getProperty(brandLogoImageRule, 'object-position')).toBe('center');
-  });
-
   it('lays out the document workflow cards in three desktop columns', () => {
     const capabilityGridRule = getRule('.capability-grid');
 

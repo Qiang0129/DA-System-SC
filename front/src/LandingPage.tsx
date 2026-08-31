@@ -4,7 +4,6 @@ import { SOFTWARE_SHORT_NAME, SOFTWARE_VERSION } from './appMeta';
 import loginIcon from './images/登录.svg';
 import registerIcon from './images/注册.svg';
 import copyIcon from './images/复制.svg';
-import brandLogo from './images/Logo.svg';
 import workbenchIcon from './images/工作台.svg';
 import capabilityOmeletIcon from './images/capability-omelet.svg';
 import capabilityCaMatrixIcon from './images/capability-ca-matrix.svg';
@@ -157,9 +156,6 @@ function TopBar() {
     <header className="landing-topbar">
       <div className="landing-topbar-inner">
         <div className="landing-brand">
-          <span className="brand-logo" aria-hidden="true">
-            <img className="brand-logo-image" src={brandLogo} width={32} height={32} alt="" aria-hidden="true" />
-          </span>
           <span className="landing-brand-copy">
             <strong>{SOFTWARE_SHORT_NAME}</strong>
           </span>
